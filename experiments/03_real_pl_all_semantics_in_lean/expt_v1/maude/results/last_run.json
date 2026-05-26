@@ -1,6 +1,6 @@
 {
-  "total": 29,
-  "pass":  29,
+  "total": 31,
+  "pass":  31,
   "fail":  0,
   "per_test": [
     {"name": "01_smoke", "status": "PASS", "reason": ""},
@@ -31,6 +31,8 @@
     {"name": "26_raise_catch", "status": "PASS", "reason": ""},
     {"name": "27_raise_propagation", "status": "PASS", "reason": ""},
     {"name": "28_tuples", "status": "PASS", "reason": ""},
-    {"name": "29_multi_assign_swap", "status": "PASS", "reason": ""}
+    {"name": "29_multi_assign_swap", "status": "PASS", "reason": ""},
+    {"name": "30_dict_basic", "status": "PASS", "reason": ""},
+    {"name": "31_dict_in", "status": "PASS", "reason": ""}
   ]
 }

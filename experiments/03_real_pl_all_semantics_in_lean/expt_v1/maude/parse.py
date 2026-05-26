@@ -110,6 +110,14 @@ def emit_expr(n: ast.AST) -> str:
         for e in reversed(n.elts):
             elts = f"consE({emit_expr(e)}, {elts})"
         return f"tupLit({elts})"
+    if isinstance(n, ast.Dict):
+        # Python:  {k1: v1, k2: v2}  ->  dictLit(consDE(k1, v1, consDE(k2, v2, nilDE)))
+        if any(k is None for k in n.keys):
+            raise SystemExit(UNSUPPORTED + "dict **-unpacking literal")
+        entries = "nilDE"
+        for k, v in zip(reversed(n.keys), reversed(n.values)):
+            entries = f"consDE({emit_expr(k)}, {emit_expr(v)}, {entries})"
+        return f"dictLit({entries})"
     if isinstance(n, ast.Subscript):
         # Python:  xs[i]   ->   (xs ! i)
         if not isinstance(n.slice, (ast.Constant, ast.Name, ast.BinOp, ast.Subscript, ast.Compare, ast.UnaryOp, ast.Call)):
@@ -127,6 +135,7 @@ def emit_expr(n: ast.AST) -> str:
             ast.GtE: ">=",
             ast.Eq: "eqq",
             ast.NotEq: "neq",
+            ast.In: "in",
         }.get(type(op))
         if sym is None:
             raise SystemExit(UNSUPPORTED + f"comparison {type(op).__name__}")

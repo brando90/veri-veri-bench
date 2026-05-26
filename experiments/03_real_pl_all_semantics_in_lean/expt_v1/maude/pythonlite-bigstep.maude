@@ -433,6 +433,41 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  crl < multiAssign(IL, E), Sigma, Out > => < spreadAssign(Sigma, IL, L), Out' >
    if < E, Sigma, Out > => < listV(L), Out' > .
 
+  --- ----- dicts [cycle 9] ----------------------------------
+  --- dict literal: evaluate keys and values left-to-right.
+  op evalDEntries : DictEntries State Out -> Configuration .
+  op <_,_> : DictObj Out -> Configuration [ctor] .
+  vars DE : DictEntries .  vars D : DictObj .
+  vars Vk Vd : Value .
+   rl evalDEntries(nilDE, Sigma, Out) => < nilD, Out > .
+  crl evalDEntries(consDE(E1, E2, DE), Sigma, Out) => < consD(Vk, Vd, D), Out3 >
+    if < E1, Sigma, Out  > => < Vk, Out1 >
+    /\ < E2, Sigma, Out1 > => < Vd, Out2 >
+    /\ evalDEntries(DE, Sigma, Out2) => < D, Out3 > .
+
+ crl < dictLit(DE), Sigma, Out > => < dictV(D), Out' >
+   if evalDEntries(DE, Sigma, Out) => < D, Out' > .
+
+  --- dict subscript get: d ! k.
+ crl < E1 ! E2, Sigma, Out > => < dictGet(D, Vk), Out2 >
+   if < E1, Sigma, Out  > => < dictV(D), Out1 >
+   /\ < E2, Sigma, Out1 > => < Vk, Out2 > .
+
+  --- dict subscript set: d[k] = v.  Reuses the `_[_]:=_` Stmt op.
+ crl < X [E1] := E2, Sigma, Out > => < Sigma[dictV(dictSet(D, Vk, Vd)) / X], Out2 >
+   if dictV(D) := Sigma(X)
+   /\ < E1, Sigma, Out  > => < Vk, Out1 >
+   /\ < E2, Sigma, Out1 > => < Vd, Out2 > .
+
+  --- len(d) for dicts.
+ crl < len(E), Sigma, Out > => < dictLen(D), Out' >
+   if < E, Sigma, Out > => < dictV(D), Out' > .
+
+  --- k in d  membership check [dict only — list/string `in` future].
+ crl < E1 in E2, Sigma, Out > => < dictHas(D, Vk), Out2 >
+   if < E1, Sigma, Out  > => < Vk, Out1 >
+   /\ < E2, Sigma, Out1 > => < dictV(D), Out2 > .
+
   --- ----- whole-program kickoff -----------------------------
   --- The program may end either with a State or with a ret[V] [if
   --- the program has a top-level return].  Both are Outcome.

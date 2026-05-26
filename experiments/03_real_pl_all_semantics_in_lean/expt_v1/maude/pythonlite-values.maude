@@ -44,6 +44,37 @@ mod PYTHONLITE-VALUES is
   op listV : ListObj -> Value [ctor] .
   op tupV  : ListObj -> Value [ctor] .   --- tuples (immutable lists, cycle 8)
 
+  --- Dicts [cycle 9]: by-value (no aliasing in v1).  Implemented as a
+  --- linear cons-list of (key, value) entries.  Lookup is O(n).  Real
+  --- Python uses a hash table; semantics-level we just need behavioural
+  --- equivalence on small inputs.
+  sort DictObj .
+  op nilD  : -> DictObj [ctor] .
+  op consD : Value Value DictObj -> DictObj [ctor] .
+  op dictV : DictObj -> Value [ctor] .
+
+  vars Kh Vh2 : Value .  vars Dh : DictObj .
+
+  op dictLen : DictObj -> Int .
+  eq dictLen(nilD) = 0 .
+  eq dictLen(consD(Kh, Vh2, Dh)) = 1 +Int dictLen(Dh) .
+
+  op dictGet : DictObj Value -> Value .
+  eq dictGet(nilD, Kh) = none .
+ ceq dictGet(consD(Kh, Vh2, Dh), Vh) = Vh2 if Kh ==Bool Vh .
+ ceq dictGet(consD(Kh, Vh2, Dh), Vh) = dictGet(Dh, Vh) if Kh =/=Bool Vh .
+
+  op dictSet : DictObj Value Value -> DictObj .
+  eq dictSet(nilD, Kh, Vh2) = consD(Kh, Vh2, nilD) .
+ ceq dictSet(consD(Kh, Vh, Dh), Vh2, Vh') = consD(Kh, Vh', Dh) if Kh ==Bool Vh2 .
+ ceq dictSet(consD(Kh, Vh, Dh), Vh2, Vh') = consD(Kh, Vh, dictSet(Dh, Vh2, Vh'))
+   if Kh =/=Bool Vh2 .
+
+  op dictHas : DictObj Value -> Bool .
+  eq dictHas(nilD, Kh) = false .
+ ceq dictHas(consD(Kh, Vh2, Dh), Vh) = true            if Kh ==Bool Vh .
+ ceq dictHas(consD(Kh, Vh2, Dh), Vh) = dictHas(Dh, Vh) if Kh =/=Bool Vh .
+
   vars Vh Vh' : Value .   vars Lh L1h L2h : ListObj .   vars Ih : Int .
 
   op lstLen : ListObj -> Int .
@@ -82,6 +113,8 @@ mod PYTHONLITE-VALUES is
   eq truthy(listV(cons(V:Value, L:ListObj))) = true .
   eq truthy(tupV(nil))     = false .
   eq truthy(tupV(cons(V:Value, L:ListObj))) = true .
+  eq truthy(dictV(nilD))    = false .
+  eq truthy(dictV(consD(Kh, Vh2, Dh))) = true .
 
   --- A function reference [cycle 5: no closure env yet] is added by
   --- pythonlite-syntax.maude after the Stmt sort exists, since funcV

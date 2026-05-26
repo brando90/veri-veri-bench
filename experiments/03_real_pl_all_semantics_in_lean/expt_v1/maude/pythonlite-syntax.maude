@@ -137,6 +137,16 @@ mod PYTHONLITE-SYNTAX is including PYTHONLITE-VALUES + PYTHONLITE-STATE + PL-ID 
   op tupLit : ExpList -> Exp [prec 20] .
   op multiAssign : IdList Exp -> Stmt [prec 40] .
 
+  --- Dict literal [cycle 9]: {k1: v1, k2: v2, ...} — parser desugars
+  --- into a DictEntries cons list.
+  sort DictEntries .
+  op nilDE  : -> DictEntries .
+  op consDE : Exp Exp DictEntries -> DictEntries .
+  op dictLit : DictEntries -> Exp [prec 20] .
+
+  --- `k in d` membership check.
+  op _in_ : Exp Exp -> Exp [prec 37 gather (E e)] .
+
   --- Top-level program is just a Stmt.
   sort Pgm .
   subsort Stmt < Pgm .
