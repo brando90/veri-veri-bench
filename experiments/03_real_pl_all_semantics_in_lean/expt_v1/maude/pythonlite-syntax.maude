@@ -147,6 +147,17 @@ mod PYTHONLITE-SYNTAX is including PYTHONLITE-VALUES + PYTHONLITE-STATE + PL-ID 
   --- `k in d` membership check.
   op _in_ : Exp Exp -> Exp [prec 37 gather (E e)] .
 
+  --- Lambda [cycle 10]: `lambda x, y: expr` evaluates to a function
+  --- value at the point where it appears (capturing the surrounding
+  --- state, just like `def`).  Parser desugars  lambda <params>: <body>
+  --- into  lambdaExp(<param IdList>, <body Exp>).
+  op lambdaExp : IdList Exp -> Exp [prec 20] .
+
+  --- Slicing [cycle 11]: list / string / tuple slicing.
+  --- Python's three-arg slice  xs[a:b:c]  desugars at parse time
+  --- into  slice3(xs, a, b, c)  with None for omitted bounds.
+  op slice3 : Exp Exp Exp Exp -> Exp [prec 20] .
+
   --- Top-level program is just a Stmt.
   sort Pgm .
   subsort Stmt < Pgm .

@@ -66,8 +66,8 @@ mod PYTHONLITE-VALUES is
 
   op dictSet : DictObj Value Value -> DictObj .
   eq dictSet(nilD, Kh, Vh2) = consD(Kh, Vh2, nilD) .
- ceq dictSet(consD(Kh, Vh, Dh), Vh2, Vh') = consD(Kh, Vh', Dh) if Kh ==Bool Vh2 .
- ceq dictSet(consD(Kh, Vh, Dh), Vh2, Vh') = consD(Kh, Vh, dictSet(Dh, Vh2, Vh'))
+ ceq dictSet(consD(Kh, Vh, Dh), Vh2, Vha) = consD(Kh, Vha, Dh) if Kh ==Bool Vh2 .
+ ceq dictSet(consD(Kh, Vh, Dh), Vh2, Vha) = consD(Kh, Vh, dictSet(Dh, Vh2, Vha))
    if Kh =/=Bool Vh2 .
 
   op dictHas : DictObj Value -> Bool .
@@ -75,7 +75,7 @@ mod PYTHONLITE-VALUES is
  ceq dictHas(consD(Kh, Vh2, Dh), Vh) = true            if Kh ==Bool Vh .
  ceq dictHas(consD(Kh, Vh2, Dh), Vh) = dictHas(Dh, Vh) if Kh =/=Bool Vh .
 
-  vars Vh Vh' : Value .   vars Lh L1h L2h : ListObj .   vars Ih : Int .
+  vars Vh Vha : Value .   vars Lh L1h L2h : ListObj .   vars Ih Ih2 : Int .
 
   op lstLen : ListObj -> Int .
   eq lstLen(nil) = 0 .
@@ -90,11 +90,22 @@ mod PYTHONLITE-VALUES is
 
   op lstAppend : ListObj Value -> ListObj .
   eq lstAppend(nil, Vh) = cons(Vh, nil) .
-  eq lstAppend(cons(Vh', Lh), Vh) = cons(Vh', lstAppend(Lh, Vh)) .
+  eq lstAppend(cons(Vha, Lh), Vh) = cons(Vha, lstAppend(Lh, Vh)) .
 
   op lstConcat : ListObj ListObj -> ListObj .
   eq lstConcat(nil, Lh) = Lh .
   eq lstConcat(cons(Vh, L1h), L2h) = cons(Vh, lstConcat(L1h, L2h)) .
+
+  --- Slicing helper [cycle 11]: lstSlice(L, a, b) returns elements
+  --- L[a], L[a+1], ..., L[b-1] (CPython half-open slicing).  Bounds
+  --- are clamped to 0 / len(L) and a negative index is converted to
+  --- len(L) + i by the caller (the bigstep rule).
+  op lstSlice : ListObj Int Int -> ListObj .
+ ceq lstSlice(Lh, Ih, Ih2) = nil if Ih >=Int Ih2 .
+ ceq lstSlice(cons(Vh, Lh), 0, Ih2) = cons(Vh, lstSlice(Lh, 0, Ih2 -Int 1))
+   if Ih2 >Int 0 .
+ ceq lstSlice(cons(Vh, Lh), Ih, Ih2) = lstSlice(Lh, Ih -Int 1, Ih2 -Int 1)
+   if Ih >Int 0 /\ Ih2 >Int 0 .
 
   --- "truthy" — Python's bool[v] semantics.
   --- 0, "", False, None are falsy; everything else is truthy.

@@ -65,10 +65,10 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   vars X : Id .
   vars Sigma Sigma' Sigma1 Sigma2 : State .
   vars Out Out1 Out2 Out3 Out' : Out .
-  vars I I1 I2 : Int .       --- only match integer values
+  vars I I1 I2 Ih Nh : Int .       --- only match integer values
   vars S S1 S2 : String .    --- only match string values
   vars B T T1 T2 : Bool .    --- only match boolean values
-  vars V V1 V2 : Value .     --- match anything
+  vars V V1 V2 Vrp : Value .     --- match anything
   vars E E1 E2 : Exp .
   vars St St1 St2 : Stmt .
 
@@ -266,9 +266,9 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    /\ I >=Int 0 /\ I <Int lstLen(L) .
 
   op lstSet : ListObj Int Value -> ListObj .
-  vars Vh Vh' : Value .  vars Lh : ListObj .
-  eq lstSet(cons(Vh', Lh), 0, Vh) = cons(Vh, Lh) .
- ceq lstSet(cons(Vh', Lh), I, Vh) = cons(Vh', lstSet(Lh, I -Int 1, Vh))
+  vars Vh Vha : Value .  vars Lh : ListObj .
+  eq lstSet(cons(Vha, Lh), 0, Vh) = cons(Vh, Lh) .
+ ceq lstSet(cons(Vha, Lh), I, Vh) = cons(Vha, lstSet(Lh, I -Int 1, Vh))
    if I >Int 0 .
 
   --- ----- sequence: normal flow OR early return ------------
@@ -309,8 +309,8 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    /\ < while(E){ St }, Sigma1, Out2 > => < Outc2, Out3 > .
   --- while: body returned -> propagate.
  crl < while(E){ St }, Sigma, Out > => < ret(V), Out2 >
-   if < E,  Sigma, Out  > => < V', Out1 >
-   /\ truthy(V') ==Bool true
+   if < E,  Sigma, Out  > => < Vrp, Out1 >
+   /\ truthy(Vrp) ==Bool true
    /\ < St, Sigma, Out1 > => < ret(V), Out2 > .
 
   --- ----- functions: def / return / call ------------------
@@ -432,6 +432,65 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    if < E, Sigma, Out > => < tupV(L), Out' > .
  crl < multiAssign(IL, E), Sigma, Out > => < spreadAssign(Sigma, IL, L), Out' >
    if < E, Sigma, Out > => < listV(L), Out' > .
+
+  --- ----- lambda [cycle 10] --------------------------------
+  --- lambdaExp(params, body)  evaluates to funcV(params, return(body), Sigma)
+  --- where Sigma is the current state (closure-equivalent behaviour).
+ rl < lambdaExp(IL, E), Sigma, Out > => < funcV(IL, return(E), Sigma), Out > .
+
+  --- ----- slicing [cycle 11] -------------------------------
+  --- xs[a:b]  with  a, b  either Int or none.  Negative indices are
+  --- Python-style: len + i.  Out-of-range bounds are clamped.
+  --- A literal `:` with no bound -> none.  Step (3rd arg of slice3)
+  --- must be 1 in v1; non-1 step deferred.
+  op clampSliceStart : Value Int -> Int .
+  op clampSliceStop  : Value Int -> Int .
+  op normIdx : Int Int -> Int .   --- normIdx(i, n): negative -> n+i, then clamp [0..n]
+  vars Nh : Int .
+  eq normIdx(Ih, Nh) =
+    if Ih <Int 0
+    then (if Ih +Int Nh <Int 0 then 0 else Ih +Int Nh fi)
+    else (if Ih >Int Nh then Nh else Ih fi)
+    fi .
+  eq clampSliceStart(none, Nh) = 0 .
+  eq clampSliceStart(Ih, Nh) = normIdx(Ih, Nh) .
+  eq clampSliceStop(none, Nh) = Nh .
+  eq clampSliceStop(Ih, Nh) = normIdx(Ih, Nh) .
+
+  --- Slice on list.
+ crl < slice3(E0, Ea, Eb, Es), Sigma, Out > => < listV(lstSlice(L, Sa, Sb)), Out3 >
+   if < E0, Sigma, Out  > => < listV(L), Out1 >
+   /\ < Ea, Sigma, Out1 > => < Va, Out2 >
+   /\ < Eb, Sigma, Out2 > => < Vb, Out3 >
+   /\ < Es, Sigma, Out3 > => < Vs, Out3 >
+   /\ Sa := clampSliceStart(Va, lstLen(L)) 
+   /\ Sb := clampSliceStop(Vb, lstLen(L)) .
+  --- [step Es is ignored in v1; only the no-step / step-1 case is correct]
+  vars Sa Sb : Int .  vars Va Vb Vs : Value .  vars Ea Eb Es E0 : Exp .
+
+  --- Slice on tuple.
+ crl < slice3(E0, Ea, Eb, Es), Sigma, Out > => < tupV(lstSlice(L, Sa, Sb)), Out3 >
+   if < E0, Sigma, Out  > => < tupV(L), Out1 >
+   /\ < Ea, Sigma, Out1 > => < Va, Out2 >
+   /\ < Eb, Sigma, Out2 > => < Vb, Out3 >
+   /\ < Es, Sigma, Out3 > => < Vs, Out3 >
+   /\ Sa := clampSliceStart(Va, lstLen(L)) 
+   /\ Sb := clampSliceStop(Vb, lstLen(L)) .
+
+  --- Slice on string.
+ crl < slice3(E0, Ea, Eb, Es), Sigma, Out > => < substr(S, Sa, Sb -Int Sa), Out3 >
+   if < E0, Sigma, Out  > => < S, Out1 >
+   /\ < Ea, Sigma, Out1 > => < Va, Out2 >
+   /\ < Eb, Sigma, Out2 > => < Vb, Out3 >
+   /\ < Es, Sigma, Out3 > => < Vs, Out3 >
+   /\ Sa := clampSliceStart(Va, length(S))
+   /\ Sb := clampSliceStop(Vb, length(S)) .
+
+  --- String indexing s[i] returns a 1-character string (CPython).
+ crl < E1 ! E2, Sigma, Out > => < substr(S, Sa, 1), Out2 >
+   if < E1, Sigma, Out  > => < S, Out1 >
+   /\ < E2, Sigma, Out1 > => < Ih, Out2 >
+   /\ Sa := normIdx(Ih, length(S)) .
 
   --- ----- dicts [cycle 9] ----------------------------------
   --- dict literal: evaluate keys and values left-to-right.

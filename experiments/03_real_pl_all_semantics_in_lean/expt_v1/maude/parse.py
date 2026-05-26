@@ -119,11 +119,23 @@ def emit_expr(n: ast.AST) -> str:
             entries = f"consDE({emit_expr(k)}, {emit_expr(v)}, {entries})"
         return f"dictLit({entries})"
     if isinstance(n, ast.Subscript):
-        # Python:  xs[i]   ->   (xs ! i)
-        if not isinstance(n.slice, (ast.Constant, ast.Name, ast.BinOp, ast.Subscript, ast.Compare, ast.UnaryOp, ast.Call)):
-            # ast.Slice (a:b) deferred
-            raise SystemExit(UNSUPPORTED + f"subscript slice {type(n.slice).__name__}")
+        # Python:  xs[i]    ->   (xs ! i)
+        # Python:  xs[a:b]   ->   slice3(xs, a, b, none)
+        # Python:  xs[a:b:c] ->   slice3(xs, a, b, c)  -- step !=1 unsupported semantically
+        if isinstance(n.slice, ast.Slice):
+            sl = n.slice
+            lo = emit_expr(sl.lower) if sl.lower is not None else "none"
+            hi = emit_expr(sl.upper) if sl.upper is not None else "none"
+            st = emit_expr(sl.step)  if sl.step  is not None else "none"
+            return f"slice3({emit_expr(n.value)}, {lo}, {hi}, {st})"
         return f"({emit_expr(n.value)} ! {emit_expr(n.slice)})"
+    if isinstance(n, ast.Lambda):
+        if n.args.defaults or n.args.kwonlyargs or n.args.vararg or n.args.kwarg:
+            raise SystemExit(UNSUPPORTED + "lambda with default / kw / var / kwarg")
+        params = "nilI"
+        for p in reversed(n.args.args):
+            params = f"consI('{p.arg}, {params})"
+        return f"lambdaExp({params}, {emit_expr(n.body)})"
     if isinstance(n, ast.Compare):
         if len(n.ops) != 1 or len(n.comparators) != 1:
             raise SystemExit(UNSUPPORTED + "chained comparisons")
