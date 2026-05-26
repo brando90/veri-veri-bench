@@ -1,0 +1,134 @@
+From:    brandojazz@gmail.com
+To:      stepurik@stanford.edu, [henry-bosch-email-please-fill-in]
+CC:      brandojazz@gmail.com, brando.science@gmail.com, brando9@stanford.edu
+Subject: [veri-veri-bench] PR #7 MERGED — pythonlite × big-step Maude (32/32 vs CPython, 10 cycles)
+
+
+Hi Stepan and Henry,
+
+PR #7 is merged into `master`.  Two of you are tagged as the
+reviewers for this work; Stepan as the primary verifier (matches your
+domain — CS522 PL semantics), Henry as the second-pair-of-eyes
+reviewer per Brando's two-reviewer rule.
+
+Repo:    https://github.com/StanfordLeanClub/veri-veri-bench
+PR:      https://github.com/StanfordLeanClub/veri-veri-bench/pull/7  (merged)
+Merge commit:  f961ba5
+
+What landed
+-----------
+End-to-end Maude implementation of `pythonlite` — a substantial Python
+subset — as a CS522-style big-step / Kahn operational semantics, plus
+a Python source → Maude AST parser, plus a CPython-vs-Maude
+differential test harness.
+
+10 iterative add-feature → re-run-diff-harness cycles:
+
+  0: int / bool / arith / cmp / and-or-not / assign / print / if /
+     while / `;`                                          (7 / 7)
+  1: strings (literal, +, len, *), polymorphic truthy     (11 / 11)
+  2: lists (literal, [i], len, +, *, .append, [i]=v);
+     Outcome=Value sort                                   (16 / 16)
+  3: for-loops (range, over list, nested)                  (19 / 19)
+  4: augmented assignment (+=, -=, *=, //=, %=)            (20 / 20)
+  5: functions: def / return / callExp / callStmt;
+     Outcome ⊕ ret(V)                                     (22 / 22)
+  6: lexical-scope CLOSURES + recursion + higher-order     (25 / 25)
+  7: EXCEPTIONS: raise / try-except; Outcome ⊕ raised(V)   (27 / 27)
+  8: tuples + multi-assign / unpacking (a, b = b, a swap)  (29 / 29)
+  9: DICTS: {k:v, ...}, d[k], d[k]=v, len(d), k in d        (31 / 31)
+ 10: LAMBDAS (anonymous closures)                          (32 / 32)
+
+Final: 32 / 32 corpus programs match CPython 3.11 output
+byte-for-byte.
+
+Tests of note
+-------------
+  fact(0..10), fib(0..10)                  (23_recursion_factorial.py)
+  make_adder(n) -> closure capturing n;
+    add5(3)=8, add100(42)=142              (24_closure_adder.py)
+  apply_twice(f, x) = f(f(x));
+    map_list(square, [1..5])=[1,4,9,16,25] (25_higher_order.py)
+  raise Exception(...) inside function,
+    caught 3 frames up at top              (27_raise_propagation.py)
+  a, b = b, a  Python swap                 (29_multi_assign_swap.py)
+  word-frequency table via dict + for-loop (31_dict_in.py)
+  Collatz from n=27: 111 steps             (05_collatz.py)
+
+Three things that need your eyes (Stepan especially)
+-----------------------------------------------------
+
+1) `experiments/03_real_pl_all_semantics_in_lean/expt_v1/maude/pythonlite-bigstep.maude`
+   Read alongside
+       `cs522/HW3-Maude/imp/0-imp-original/1-imp-bigstep/imp-semantics-bigstep.maude`
+   Same `< Cfg, σ, Out > => < Cfg', Out' >` Kahn shape.  Three
+   additions over IMP++:
+     * Value sort (Int ⊔ Bool ⊔ String ⊔ none ⊔ list ⊔ tup ⊔ dict ⊔ func)
+     * Outcome sort (State ⊔ ret(V) ⊔ raised(V))
+     * captured-State field on funcV (lexical closures)
+   Faithful to CS522 big-step style, or did the agent invent
+   something off-pattern?
+
+2) `experiments/03_real_pl_all_semantics_in_lean/expt_v1/verification_spec.md`
+   The three-layer protocol:
+     (a) differential testing vs reference interpreter  [32/32 PASS — done]
+     (b) cross-framework equivalence theorems in Lean    [deferred]
+     (c) textbook + your spot-check                       [pending you]
+   Is (a) at this corpus size enough?  If not, what extra layer or
+   what extra corpus would close it?
+
+3) `experiments/03_real_pl_all_semantics_in_lean/expt_v1/maude/results/results_summary_2026-05-26__17-36-32.md`
+   Final per-cycle table + final language-coverage matrix + final
+   deferred-features list.
+
+Reproducing
+-----------
+
+  sudo apt-get install -y maude python3
+  git clone https://github.com/StanfordLeanClub/veri-veri-bench
+  cd veri-veri-bench/experiments/03_real_pl_all_semantics_in_lean/expt_v1/maude
+  ./run_diff_test.sh
+  # Summary: 32 / 32 passed, 0 failed.
+
+Single test:
+
+  PROG=tests/24_closure_adder.py
+  python3 parse.py "$PROG" myPgm > /tmp/myPgm.maude
+  maude -no-prelude -no-banner <<EOF
+  in builtins.maude
+  in pl-string.maude
+  in pythonlite-values.maude
+  in pythonlite-state.maude
+  in pythonlite-syntax.maude
+  in pythonlite-bigstep.maude
+  in /tmp/myPgm.maude
+  mod RUN is including PYTHONLITE-SEMANTICS-BIGSTEP + MYPGM-PROG . endm
+  rewrite < myPgm > .
+  quit
+  EOF
+  python3 "$PROG"
+
+Open follow-ups (cycle 11+, deferred to v2)
+-------------------------------------------
+
+  - slicing bigstep wiring  (infra in place; rule's Es-discard pattern
+                              needs work)
+  - list aliasing via Heap   (currently by-value lists)
+  - exception type hierarchy + isinstance dispatch
+  - try / finally, multiple except clauses
+  - default args, *args, **kwargs
+  - floats, sets, classes, generators
+  - list / dict comprehensions
+  - Lean port at `Imp/Real/Pythonlite/` — to close layer (b) of the
+    verification protocol
+
+Thanks both — looking forward to your read.
+
+
+-----
+Brando Miranda
+Ph.D. Student
+Computer Science, Stanford University
+EDGE Scholar, Stanford University
+brando9@stanford.edu
+website: https://brando90.github.io/brandomiranda/
