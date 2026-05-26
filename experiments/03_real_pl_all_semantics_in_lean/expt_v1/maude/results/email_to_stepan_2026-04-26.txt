@@ -1,0 +1,152 @@
+From:    brandojazz@gmail.com
+To:      stepurik@stanford.edu
+CC:      brandojazz@gmail.com, brando.science@gmail.com, brando9@stanford.edu
+Subject: [veri-veri-bench] Experiment 03 — pythonlite × big-step Maude (29/29 vs CPython, 8 cycles) — for your verification
+
+
+Hi Stepan,
+
+Following up on the Discord thread from Apr 22 / 26 about scaling
+CS522 PL semantics onto a *real* programming language: I've pushed an
+end-to-end Maude implementation of `pythonlite` — a meaningful subset
+of real Python — as a CS522-style big-step / Kahn operational
+semantics, and verified it byte-for-byte against CPython 3.11.
+
+PR (for your review):
+  https://github.com/Stanford-AI-for-LEAN-Club/veri-veri-bench/pull/7
+Branch:
+  claude/pl-semantics-benchmark-qBZez
+Final-cycle commit:
+  c48214f
+
+Numbers
+-------
+- 29 / 29 corpus programs produce identical output to CPython 3.11.
+- 8 iterative add-feature → re-run-diff cycles (one commit per cycle).
+- ~430 lines of Maude semantics across 4 pythonlite-*.maude files
+  plus a pl-string wrapper (built directly on top of your CS522
+  builtins.maude — same `< Cfg, σ, Out > => < Cfg', Out' >` shape as
+  cs522/HW1-Maude and cs522/HW3-Maude).
+
+Per-cycle progression
+---------------------
+  cycle 0:  int / bool / arith / cmp / and-or-not / assign / print /
+            if / while                                      (7 / 7)
+  cycle 1:  strings (literal, +, len, *), polymorphic truthy
+                                                            (11 / 11)
+  cycle 2:  lists (literal, [i], len, +, *, .append, [i]=v)
+            and a Value sort union of Int/Bool/String/None/list   (16 / 16)
+  cycle 3:  for-loops (range, over list, nested) via parser desugar
+                                                            (19 / 19)
+  cycle 4:  augmented assignment (+=, -=, *=, //=, %=)      (20 / 20)
+  cycle 5:  functions (def, return, callExp, callStmt) +
+            new Outcome sort with ret(V)                    (22 / 22)
+  cycle 6:  lexical-scope closures + recursion + higher-order
+                                                            (25 / 25)
+  cycle 7:  exceptions (raise, try/except) +
+            Outcome extended with raised(V)                 (27 / 27)
+  cycle 8:  tuples (immutable lists) + multi-assign / unpacking
+            (e.g. classic Python  a, b = b, a  swap)        (29 / 29)
+
+Tests of note that you can run end-to-end:
+
+  fact(0..10), fib(0..10)                  (23_recursion_factorial.py)
+  make_adder(n) -> closure capturing n;
+    add5(3) = 8, add100(42) = 142          (24_closure_adder.py)
+  apply_twice(f, x) = f(f(x));
+    map_list(square, [1..5]) = [1,4,9,16,25] (25_higher_order.py)
+  raise Exception("...") inside a function,
+    caught 3 frames up at the top-level    (27_raise_propagation.py)
+  Python's  a, b = b, a  swap              (29_multi_assign_swap.py)
+  Collatz from n=27: 111 steps (matches the well-known length),
+    10 227 Maude rewrites                  (05_collatz.py)
+
+Three things that need your eyes specifically
+---------------------------------------------
+
+1) `experiments/03_real_pl_all_semantics_in_lean/expt_v1/maude/`
+       `pythonlite-bigstep.maude`
+   Read this next to
+       `cs522/HW3-Maude/imp/0-imp-original/1-imp-bigstep/imp-semantics-bigstep.maude`
+   The judgment shapes are the same Kahn-style
+       < Exp,  Sigma, Out >  =>  < Value, Out' >
+       < Stmt, Sigma, Out >  =>  < Outcome, Out' >
+       < Pgm                >  =>  < Sigma, Out >
+   Three additions over IMP++:
+     * a Value sort (Int ⊔ Bool ⊔ String ⊔ none ⊔ listV ⊔ tupV ⊔ funcV)
+     * an Outcome sort (State ⊔ ret(V) ⊔ raised(V)) for
+       early returns and exceptions, propagated through seq/if/while
+     * a captured-State field on funcV for lexical closures
+   Question for you: do those three additions stay faithful to CS522
+   big-step style, or did the LLM invent something off-pattern?
+
+2) `experiments/03_real_pl_all_semantics_in_lean/expt_v1/verification_spec.md`
+   The three-layer protocol we proposed for certifying the output:
+     (a) differential testing vs reference interpreter   [29/29 PASS]
+     (b) cross-framework equivalence theorems in Lean    [deferred]
+     (c) textbook + your spot-check                       [pending you]
+   Is layer (a) at this scale enough for you to sign off on the
+   "behaviour" half of correctness?  And if not, what corpus / what
+   extra layer would convince you?
+
+3) `experiments/03_real_pl_all_semantics_in_lean/expt_v1/maude/results/results_summary_2026-04-26__21-18-11.md`
+   Full per-test rewrite-count table + a partial honesty inventory
+   of the bugs the iterative testing caught (Maude's parser
+   surprised the LLM repeatedly — undeclared trailing-apostrophe
+   vars, inline V:Value annotations not matching, `(...)` inside
+   `---` comments breaking the lexer, `Sigma(X) ==Bool listV(L)` is
+   not a matching condition, etc.).
+
+Reproducing
+-----------
+
+  sudo apt-get install -y maude python3
+  git fetch origin claude/pl-semantics-benchmark-qBZez
+  git checkout claude/pl-semantics-benchmark-qBZez
+  cd experiments/03_real_pl_all_semantics_in_lean/expt_v1/maude
+  ./run_diff_test.sh
+  # Summary: 29 / 29 passed, 0 failed.
+
+Single test:
+
+  PROG=tests/24_closure_adder.py
+  python3 parse.py "$PROG" myPgm > /tmp/myPgm.maude
+  maude -no-prelude -no-banner <<EOF
+  in builtins.maude
+  in pl-string.maude
+  in pythonlite-values.maude
+  in pythonlite-state.maude
+  in pythonlite-syntax.maude
+  in pythonlite-bigstep.maude
+  in /tmp/myPgm.maude
+  mod RUN is including PYTHONLITE-SEMANTICS-BIGSTEP + MYPGM-PROG . endm
+  rewrite < myPgm > .
+  quit
+  EOF
+  python3 "$PROG"     # should match the Maude Out buffer
+
+Brando — separate ask: can you add `NesterovStepan` (Stepan's GitHub
+handle) as a collaborator on stanford-ai-for-lean-club/veri-veri-bench?
+The reviewer-assign API rejects with `Reviews may only be requested
+from collaborators`.  Until then I left an @-mention in the PR comment
+thread; please add him so we can route review properly going forward.
+
+Open follow-ups in this experiment (deferred to cycle 9+):
+  - list aliasing (Heap + listRef(Addr))    — currently by-value lists
+  - exception class hierarchy / isinstance  — `except` currently catches all
+  - try / finally, multiple except clauses
+  - default args, *args, **kwargs           — currently positional-only
+  - floats, dicts, classes, generators, slicing, lambdas
+  - Lean port at `Imp/Real/Pythonlite/`     — to close layer (b) of the
+                                              verification protocol
+
+Thanks Stepan — looking forward to your read.
+
+
+-----
+Brando Miranda
+Ph.D. Student
+Computer Science, Stanford University
+EDGE Scholar, Stanford University
+brando9@stanford.edu
+website: https://brando90.github.io/brandomiranda/
