@@ -97,12 +97,14 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   ---   fnFlag     : this State is a function frame
   ---   loc(X)     : X was assigned inside the frame, so it is local
   ---   prm(X)     : X is a parameter of the frame [also local]
+  ---   cap(X)     : X's value in the frame came from the closure's captured State
   ---   mut(X)     : X's list was appended to / set in place inside the frame
   --- A call statement copies mut-but-not-loc variables back to the caller
   --- [lists are pure values here, so this models Python's aliasing].
   op fnFlag : -> Id [ctor] .
   op loc : Id -> Id [ctor] .
   op prm : Id -> Id [ctor] .
+  op cap : Id -> Id [ctor] .
   op mut : Id -> Id [ctor] .
   op asgn : State Id Value -> State .
   op mutd : State Id Value -> State .
@@ -114,6 +116,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   eq isMark(fnFlag) = true .
   eq isMark(loc(X)) = true .
   eq isMark(prm(X)) = true .
+  eq isMark(cap(X)) = true .
   eq isMark(mut(X)) = true .
   eq isMark(X) = false [owise] .
   op stripMarks : State -> State .
@@ -135,9 +138,9 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
     = if isMark(X) then fill(Sigma, Sigma1, Cap, Orig)
       else if bound(Sigma, X)
            then (if isLocal(Cap, X) andBool (isLocal(Orig, X) =/=Bool true)
-                 then fill(Sigma[V / X], Sigma1, Cap, Orig)
+                 then fill(Sigma[V / X][true / cap(X)], Sigma1, Cap, Orig)
                  else fill(Sigma, Sigma1, Cap, Orig) fi)
-           else fill(Sigma & (X |-> V), Sigma1, Cap, Orig) fi fi .
+           else fill(Sigma & (X |-> V) & (cap(X) |-> true), Sigma1, Cap, Orig) fi fi .
   --- bound(Sigma, X): X has a binding in Sigma, possibly to `none` (cycle 13).
   op bound : State Id -> Bool .
   eq bound(Sigma & X |-> V, X) = true .
@@ -154,40 +157,62 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  crl < X,    Sigma, Out > => < Sigma(X), Out >
    if bound(Sigma, X) .   --- a variable bound to None is a real binding (cycle 13)
 
+  --- ----- operators: evaluate each operand ONCE, then dispatch [cycle 14] -----
+  --- Each binary operator is ONE rule that evaluates E1, then E2, then hands
+  --- the two ExpOut results to `bin(OP, V1, V2, Out)`, whose typed rules
+  --- below pick the case by pattern.  A raise from either operand [xraised]
+  --- propagates left to right.  [A rule per type that re-ran E1 made a raise
+  --- through nested operators cost ~8^depth.]
+  sort OpC .
+  ops oPlus oMinus oTimes oFdiv oMod oLt oLe oGt oGe oEq oNe oIn oIdx oLen oNot oNeg : -> OpC [ctor] .
+  vars OP : OpC .  vars EO1 EO2 : ExpOut .
+  op bin : OpC Value Value Out -> Configuration .
+  op b1 : OpC ExpOut Exp State Out -> Configuration .
+  op b2 : OpC Value ExpOut Out -> Configuration .
+  op un : OpC Value Out -> Configuration .
+  op u1 : OpC ExpOut Out -> Configuration .
+ crl < E1 + E2, Sigma, Out > => CfgR  if < E1, Sigma, Out > => < EO1, Out1 > /\ b1(oPlus, EO1, E2, Sigma, Out1) => CfgR .
+ crl < E1 - E2, Sigma, Out > => CfgR  if < E1, Sigma, Out > => < EO1, Out1 > /\ b1(oMinus, EO1, E2, Sigma, Out1) => CfgR .
+ crl < E1 * E2, Sigma, Out > => CfgR  if < E1, Sigma, Out > => < EO1, Out1 > /\ b1(oTimes, EO1, E2, Sigma, Out1) => CfgR .
+ crl < E1 // E2, Sigma, Out > => CfgR  if < E1, Sigma, Out > => < EO1, Out1 > /\ b1(oFdiv, EO1, E2, Sigma, Out1) => CfgR .
+ crl < E1 % E2, Sigma, Out > => CfgR  if < E1, Sigma, Out > => < EO1, Out1 > /\ b1(oMod, EO1, E2, Sigma, Out1) => CfgR .
+ crl < E1 < E2, Sigma, Out > => CfgR  if < E1, Sigma, Out > => < EO1, Out1 > /\ b1(oLt, EO1, E2, Sigma, Out1) => CfgR .
+ crl < E1 <= E2, Sigma, Out > => CfgR  if < E1, Sigma, Out > => < EO1, Out1 > /\ b1(oLe, EO1, E2, Sigma, Out1) => CfgR .
+ crl < E1 > E2, Sigma, Out > => CfgR  if < E1, Sigma, Out > => < EO1, Out1 > /\ b1(oGt, EO1, E2, Sigma, Out1) => CfgR .
+ crl < E1 >= E2, Sigma, Out > => CfgR  if < E1, Sigma, Out > => < EO1, Out1 > /\ b1(oGe, EO1, E2, Sigma, Out1) => CfgR .
+ crl < E1 eqq E2, Sigma, Out > => CfgR  if < E1, Sigma, Out > => < EO1, Out1 > /\ b1(oEq, EO1, E2, Sigma, Out1) => CfgR .
+ crl < E1 neq E2, Sigma, Out > => CfgR  if < E1, Sigma, Out > => < EO1, Out1 > /\ b1(oNe, EO1, E2, Sigma, Out1) => CfgR .
+ crl < E1 in E2, Sigma, Out > => CfgR  if < E1, Sigma, Out > => < EO1, Out1 > /\ b1(oIn, EO1, E2, Sigma, Out1) => CfgR .
+ crl < E1 ! E2, Sigma, Out > => CfgR  if < E1, Sigma, Out > => < EO1, Out1 > /\ b1(oIdx, EO1, E2, Sigma, Out1) => CfgR .
+ crl b1(OP, V1, E2, Sigma, Out1) => CfgR
+   if < E2, Sigma, Out1 > => < EO2, Out2 > /\ b2(OP, V1, EO2, Out2) => CfgR .
+  rl b1(OP, xraised(V, Sigma1), E2, Sigma, Out1) => < xraised(V, Sigma1), Out1 > .
+  rl b2(OP, V1, V2, Out2) => bin(OP, V1, V2, Out2) .
+  rl b2(OP, V1, xraised(V, Sigma1), Out2) => < xraised(V, Sigma1), Out2 > .
+  rl u1(OP, V, Out1) => un(OP, V, Out1) .
+  rl u1(OP, xraised(V, Sigma1), Out1) => < xraised(V, Sigma1), Out1 > .
+ crl < uminus E, Sigma, Out > => CfgR  if < E, Sigma, Out > => < EO1, Out1 > /\ u1(oNeg, EO1, Out1) => CfgR .
+ crl < not E, Sigma, Out > => CfgR     if < E, Sigma, Out > => < EO1, Out1 > /\ u1(oNot, EO1, Out1) => CfgR .
+ crl < len(E), Sigma, Out > => CfgR    if < E, Sigma, Out > => < EO1, Out1 > /\ u1(oLen, EO1, Out1) => CfgR .
+  rl un(oNeg, I, Out1) => < -Int I, Out1 > .
+  rl un(oNot, V, Out1) => < notBool truthy(V), Out1 > .
+
   --- ----- arithmetic [Int + Int = Int] ----------------------
- crl < E1 + E2, Sigma, Out > => < I1 +Int I2, Out2 >
-   if < E1, Sigma, Out  > => < I1, Out1 >
-   /\ < E2, Sigma, Out1 > => < I2, Out2 > .
- crl < E1 - E2, Sigma, Out > => < I1 -Int I2, Out2 >
-   if < E1, Sigma, Out  > => < I1, Out1 >
-   /\ < E2, Sigma, Out1 > => < I2, Out2 > .
- crl < E1 * E2, Sigma, Out > => < I1 *Int I2, Out2 >
-   if < E1, Sigma, Out  > => < I1, Out1 >
-   /\ < E2, Sigma, Out1 > => < I2, Out2 > .
- crl < E1 // E2, Sigma, Out > => < floorDiv(I1, I2), Out2 >
-   if < E1, Sigma, Out  > => < I1, Out1 >
-   /\ < E2, Sigma, Out1 > => < I2, Out2 >
-   /\ I2 =/=Bool 0 .
- crl < E1 % E2, Sigma, Out > => < floorMod(I1, I2), Out2 >
-   if < E1, Sigma, Out  > => < I1, Out1 >
-   /\ < E2, Sigma, Out1 > => < I2, Out2 >
-   /\ I2 =/=Bool 0 .
- crl < uminus E, Sigma, Out > => < -Int I, Out' >
-   if < E, Sigma, Out > => < I, Out' > .
+ rl bin(oPlus, I1, I2, Out2) => < I1 +Int I2, Out2 > .
+ rl bin(oMinus, I1, I2, Out2) => < I1 -Int I2, Out2 > .
+ rl bin(oTimes, I1, I2, Out2) => < I1 *Int I2, Out2 > .
+ crl bin(oFdiv, I1, I2, Out2) => < floorDiv(I1, I2), Out2 >
+   if I2 =/=Bool 0 .
+ crl bin(oMod, I1, I2, Out2) => < floorMod(I1, I2), Out2 >
+   if I2 =/=Bool 0 .
 
   --- ----- string concatenation [String + String = String] ----
- crl < E1 + E2, Sigma, Out > => < S1 +String S2, Out2 >
-   if < E1, Sigma, Out  > => < S1, Out1 >
-   /\ < E2, Sigma, Out1 > => < S2, Out2 > .
+ rl bin(oPlus, S1, S2, Out2) => < S1 +String S2, Out2 > .
 
   --- ----- string repetition [String * Int = String] ----------
   --- Python: "ab" * 3 == "ababab".  Implemented via an auxiliary.
- crl < E1 * E2, Sigma, Out > => < strRep(S1, I2), Out2 >
-   if < E1, Sigma, Out  > => < S1, Out1 >
-   /\ < E2, Sigma, Out1 > => < I2, Out2 > .
- crl < E1 * E2, Sigma, Out > => < strRep(S2, I1), Out2 >
-   if < E1, Sigma, Out  > => < I1, Out1 >
-   /\ < E2, Sigma, Out1 > => < S2, Out2 > .
+ rl bin(oTimes, S1, I2, Out2) => < strRep(S1, I2), Out2 > .
+ rl bin(oTimes, I1, S2, Out2) => < strRep(S2, I1), Out2 > .
 
   op strRep : String Int -> String .
   eq strRep(S, 0) = "" .
@@ -195,10 +220,8 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  ceq strRep(S, I) = "" if I <=Int 0 .
 
   --- ----- len[_] -------------------------------------------
- crl < len(E), Sigma, Out > => < length(S), Out' >
-   if < E, Sigma, Out > => < S, Out' > .
- crl < len(E), Sigma, Out > => < lstLen(L), Out' >
-   if < E, Sigma, Out > => < listV(L), Out' > .
+ rl un(oLen, S, Out') => < length(S), Out' > .
+ rl un(oLen, listV(L), Out') => < lstLen(L), Out' > .
   vars L L1 L2 : ListObj .
 
   --- ----- list literal: evaluate elements left-to-right ------
@@ -214,68 +237,40 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   vars EL : ExpList .
 
   --- ----- list indexing: xs ! i  [Python xs[i]] -----------
- crl < E1 ! E2, Sigma, Out > => < lstIdx(L, I), Out2 >
-   if < E1, Sigma, Out  > => < listV(L), Out1 >
-   /\ < E2, Sigma, Out1 > => < I, Out2 >
-   /\ I >=Int 0
+ crl bin(oIdx, listV(L), I, Out2) => < lstIdx(L, I), Out2 >
+   if I >=Int 0
    /\ I <Int lstLen(L) .
   --- [out-of-range indexing is currently stuck; cycle 7 will raise IndexError]
 
   --- ----- list `+` concat -------------------------------
- crl < E1 + E2, Sigma, Out > => < listV(lstConcat(L1, L2)), Out2 >
-   if < E1, Sigma, Out  > => < listV(L1), Out1 >
-   /\ < E2, Sigma, Out1 > => < listV(L2), Out2 > .
+ rl bin(oPlus, listV(L1), listV(L2), Out2) => < listV(lstConcat(L1, L2)), Out2 > .
 
   --- ----- list `*` repetition: lst * n / n * lst --------
   op lstRep : ListObj Int -> ListObj .
   eq lstRep(L, 0) = nil .
  ceq lstRep(L, I) = lstConcat(L, lstRep(L, I -Int 1)) if I >Int 0 .
  ceq lstRep(L, I) = nil if I <=Int 0 .
- crl < E1 * E2, Sigma, Out > => < listV(lstRep(L1, I2)), Out2 >
-   if < E1, Sigma, Out  > => < listV(L1), Out1 >
-   /\ < E2, Sigma, Out1 > => < I2, Out2 > .
- crl < E1 * E2, Sigma, Out > => < listV(lstRep(L2, I1)), Out2 >
-   if < E1, Sigma, Out  > => < I1, Out1 >
-   /\ < E2, Sigma, Out1 > => < listV(L2), Out2 > .
+ rl bin(oTimes, listV(L1), I2, Out2) => < listV(lstRep(L1, I2)), Out2 > .
+ rl bin(oTimes, I1, listV(L2), Out2) => < listV(lstRep(L2, I1)), Out2 > .
 
   --- ----- comparison ---------------------------------------
   --- Numeric comparisons.
- crl < E1 <  E2, Sigma, Out > => < (I1 <=Int I2) andBool (I1 =/=Bool I2), Out2 >
-   if < E1, Sigma, Out  > => < I1, Out1 >
-   /\ < E2, Sigma, Out1 > => < I2, Out2 > .
- crl < E1 <= E2, Sigma, Out > => < I1 <=Int I2, Out2 >
-   if < E1, Sigma, Out  > => < I1, Out1 >
-   /\ < E2, Sigma, Out1 > => < I2, Out2 > .
- crl < E1 >  E2, Sigma, Out > => < (I2 <=Int I1) andBool (I1 =/=Bool I2), Out2 >
-   if < E1, Sigma, Out  > => < I1, Out1 >
-   /\ < E2, Sigma, Out1 > => < I2, Out2 > .
- crl < E1 >= E2, Sigma, Out > => < I2 <=Int I1, Out2 >
-   if < E1, Sigma, Out  > => < I1, Out1 >
-   /\ < E2, Sigma, Out1 > => < I2, Out2 > .
+ rl bin(oLt, I1, I2, Out2) => < (I1 <=Int I2) andBool (I1 =/=Bool I2), Out2 > .
+ rl bin(oLe, I1, I2, Out2) => < I1 <=Int I2, Out2 > .
+ rl bin(oGt, I1, I2, Out2) => < (I2 <=Int I1) andBool (I1 =/=Bool I2), Out2 > .
+ rl bin(oGe, I1, I2, Out2) => < I2 <=Int I1, Out2 > .
 
   --- Equality / disequality work on any value pair [int vs int,
   --- string vs string, bool vs bool, none vs none, mixed-type yields
   --- false].  We use Maude's polymorphic ==Bool / =/=Bool.
- crl < E1 eqq E2, Sigma, Out > => < V1 ==Bool V2, Out2 >
-   if < E1, Sigma, Out  > => < V1, Out1 >
-   /\ < E2, Sigma, Out1 > => < V2, Out2 > .
- crl < E1 neq E2, Sigma, Out > => < V1 =/=Bool V2, Out2 >
-   if < E1, Sigma, Out  > => < V1, Out1 >
-   /\ < E2, Sigma, Out1 > => < V2, Out2 > .
+ rl bin(oEq, V1, V2, Out2) => < V1 ==Bool V2, Out2 > .
+ rl bin(oNe, V1, V2, Out2) => < V1 =/=Bool V2, Out2 > .
 
   --- String <, <=, >, >= [Python lexicographic compare]
- crl < E1 <  E2, Sigma, Out > => < strLt(S1, S2), Out2 >
-   if < E1, Sigma, Out  > => < S1, Out1 >
-   /\ < E2, Sigma, Out1 > => < S2, Out2 > .
- crl < E1 <= E2, Sigma, Out > => < strLt(S1, S2) orBool (S1 ==Bool S2), Out2 >
-   if < E1, Sigma, Out  > => < S1, Out1 >
-   /\ < E2, Sigma, Out1 > => < S2, Out2 > .
- crl < E1 >  E2, Sigma, Out > => < strLt(S2, S1), Out2 >
-   if < E1, Sigma, Out  > => < S1, Out1 >
-   /\ < E2, Sigma, Out1 > => < S2, Out2 > .
- crl < E1 >= E2, Sigma, Out > => < strLt(S2, S1) orBool (S1 ==Bool S2), Out2 >
-   if < E1, Sigma, Out  > => < S1, Out1 >
-   /\ < E2, Sigma, Out1 > => < S2, Out2 > .
+ rl bin(oLt, S1, S2, Out2) => < strLt(S1, S2), Out2 > .
+ rl bin(oLe, S1, S2, Out2) => < strLt(S1, S2) orBool (S1 ==Bool S2), Out2 > .
+ rl bin(oGt, S1, S2, Out2) => < strLt(S2, S1), Out2 > .
+ rl bin(oGe, S1, S2, Out2) => < strLt(S2, S1) orBool (S1 ==Bool S2), Out2 > .
 
   op strLt : String String -> Bool .
  ceq strLt(S1, S2) = true  if (rat-substr-cmp(S1, S2)) <Int 0 .
@@ -300,108 +295,24 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   --- ----- boolean ops with short-circuit and truthy[_] ------
   --- Python's `and` / `or` return the actual operand value, not a
   --- coerced bool: `0 or 5 == 5`, `5 and 7 == 7`.  We implement that.
- crl < E1 and E2, Sigma, Out > => < V1, Out' >
-   if < E1, Sigma, Out > => < V1, Out' >
-   /\ truthy(V1) ==Bool false .
- crl < E1 and E2, Sigma, Out > => < V2, Out2 >
-   if < E1, Sigma, Out  > => < V1, Out1 >
-   /\ truthy(V1) ==Bool true
-   /\ < E2, Sigma, Out1 > => < V2, Out2 > .
- crl < E1 or E2, Sigma, Out > => < V1, Out' >
-   if < E1, Sigma, Out > => < V1, Out' >
-   /\ truthy(V1) ==Bool true .
- crl < E1 or E2, Sigma, Out > => < V2, Out2 >
-   if < E1, Sigma, Out  > => < V1, Out1 >
-   /\ truthy(V1) ==Bool false
-   /\ < E2, Sigma, Out1 > => < V2, Out2 > .
- crl < not E, Sigma, Out > => < notBool truthy(V), Out' >
-   if < E, Sigma, Out > => < V, Out' > .
-
-  --- ----- raise inside an operand [cycle 14] ------------
-  --- A call that raises in operand position yields raised[V, S] instead of a
-  --- Value, so the operator propagates it [left operand first].
-  vars Vrz : Value .  vars Srz : State .
- crl < E1 + E2, Sigma, Out > => < xraised(Vrz, Srz), Out1 >
-   if < E1, Sigma, Out > => < xraised(Vrz, Srz), Out1 > .
- crl < E1 + E2, Sigma, Out > => < xraised(Vrz, Srz), Out2 >
-   if < E1, Sigma, Out > => < V1, Out1 >
-   /\ < E2, Sigma, Out1 > => < xraised(Vrz, Srz), Out2 > .
- crl < E1 - E2, Sigma, Out > => < xraised(Vrz, Srz), Out1 >
-   if < E1, Sigma, Out > => < xraised(Vrz, Srz), Out1 > .
- crl < E1 - E2, Sigma, Out > => < xraised(Vrz, Srz), Out2 >
-   if < E1, Sigma, Out > => < V1, Out1 >
-   /\ < E2, Sigma, Out1 > => < xraised(Vrz, Srz), Out2 > .
- crl < E1 * E2, Sigma, Out > => < xraised(Vrz, Srz), Out1 >
-   if < E1, Sigma, Out > => < xraised(Vrz, Srz), Out1 > .
- crl < E1 * E2, Sigma, Out > => < xraised(Vrz, Srz), Out2 >
-   if < E1, Sigma, Out > => < V1, Out1 >
-   /\ < E2, Sigma, Out1 > => < xraised(Vrz, Srz), Out2 > .
- crl < E1 // E2, Sigma, Out > => < xraised(Vrz, Srz), Out1 >
-   if < E1, Sigma, Out > => < xraised(Vrz, Srz), Out1 > .
- crl < E1 // E2, Sigma, Out > => < xraised(Vrz, Srz), Out2 >
-   if < E1, Sigma, Out > => < V1, Out1 >
-   /\ < E2, Sigma, Out1 > => < xraised(Vrz, Srz), Out2 > .
- crl < E1 % E2, Sigma, Out > => < xraised(Vrz, Srz), Out1 >
-   if < E1, Sigma, Out > => < xraised(Vrz, Srz), Out1 > .
- crl < E1 % E2, Sigma, Out > => < xraised(Vrz, Srz), Out2 >
-   if < E1, Sigma, Out > => < V1, Out1 >
-   /\ < E2, Sigma, Out1 > => < xraised(Vrz, Srz), Out2 > .
- crl < E1 < E2, Sigma, Out > => < xraised(Vrz, Srz), Out1 >
-   if < E1, Sigma, Out > => < xraised(Vrz, Srz), Out1 > .
- crl < E1 < E2, Sigma, Out > => < xraised(Vrz, Srz), Out2 >
-   if < E1, Sigma, Out > => < V1, Out1 >
-   /\ < E2, Sigma, Out1 > => < xraised(Vrz, Srz), Out2 > .
- crl < E1 <= E2, Sigma, Out > => < xraised(Vrz, Srz), Out1 >
-   if < E1, Sigma, Out > => < xraised(Vrz, Srz), Out1 > .
- crl < E1 <= E2, Sigma, Out > => < xraised(Vrz, Srz), Out2 >
-   if < E1, Sigma, Out > => < V1, Out1 >
-   /\ < E2, Sigma, Out1 > => < xraised(Vrz, Srz), Out2 > .
- crl < E1 > E2, Sigma, Out > => < xraised(Vrz, Srz), Out1 >
-   if < E1, Sigma, Out > => < xraised(Vrz, Srz), Out1 > .
- crl < E1 > E2, Sigma, Out > => < xraised(Vrz, Srz), Out2 >
-   if < E1, Sigma, Out > => < V1, Out1 >
-   /\ < E2, Sigma, Out1 > => < xraised(Vrz, Srz), Out2 > .
- crl < E1 >= E2, Sigma, Out > => < xraised(Vrz, Srz), Out1 >
-   if < E1, Sigma, Out > => < xraised(Vrz, Srz), Out1 > .
- crl < E1 >= E2, Sigma, Out > => < xraised(Vrz, Srz), Out2 >
-   if < E1, Sigma, Out > => < V1, Out1 >
-   /\ < E2, Sigma, Out1 > => < xraised(Vrz, Srz), Out2 > .
- crl < E1 eqq E2, Sigma, Out > => < xraised(Vrz, Srz), Out1 >
-   if < E1, Sigma, Out > => < xraised(Vrz, Srz), Out1 > .
- crl < E1 eqq E2, Sigma, Out > => < xraised(Vrz, Srz), Out2 >
-   if < E1, Sigma, Out > => < V1, Out1 >
-   /\ < E2, Sigma, Out1 > => < xraised(Vrz, Srz), Out2 > .
- crl < E1 neq E2, Sigma, Out > => < xraised(Vrz, Srz), Out1 >
-   if < E1, Sigma, Out > => < xraised(Vrz, Srz), Out1 > .
- crl < E1 neq E2, Sigma, Out > => < xraised(Vrz, Srz), Out2 >
-   if < E1, Sigma, Out > => < V1, Out1 >
-   /\ < E2, Sigma, Out1 > => < xraised(Vrz, Srz), Out2 > .
- crl < E1 in E2, Sigma, Out > => < xraised(Vrz, Srz), Out1 >
-   if < E1, Sigma, Out > => < xraised(Vrz, Srz), Out1 > .
- crl < E1 in E2, Sigma, Out > => < xraised(Vrz, Srz), Out2 >
-   if < E1, Sigma, Out > => < V1, Out1 >
-   /\ < E2, Sigma, Out1 > => < xraised(Vrz, Srz), Out2 > .
- crl < E1 ! E2, Sigma, Out > => < xraised(Vrz, Srz), Out1 >
-   if < E1, Sigma, Out > => < xraised(Vrz, Srz), Out1 > .
- crl < E1 ! E2, Sigma, Out > => < xraised(Vrz, Srz), Out2 >
-   if < E1, Sigma, Out > => < V1, Out1 >
-   /\ < E2, Sigma, Out1 > => < xraised(Vrz, Srz), Out2 > .
- crl < E1 and E2, Sigma, Out > => < xraised(Vrz, Srz), Out1 >
-   if < E1, Sigma, Out > => < xraised(Vrz, Srz), Out1 > .
- crl < E1 or E2, Sigma, Out > => < xraised(Vrz, Srz), Out1 >
-   if < E1, Sigma, Out > => < xraised(Vrz, Srz), Out1 > .
- crl < E1 and E2, Sigma, Out > => < xraised(Vrz, Srz), Out2 >
-   if < E1, Sigma, Out > => < V1, Out1 >
-   /\ truthy(V1) ==Bool true
-   /\ < E2, Sigma, Out1 > => < xraised(Vrz, Srz), Out2 > .
- crl < E1 or E2, Sigma, Out > => < xraised(Vrz, Srz), Out2 >
-   if < E1, Sigma, Out > => < V1, Out1 >
-   /\ truthy(V1) ==Bool false
-   /\ < E2, Sigma, Out1 > => < xraised(Vrz, Srz), Out2 > .
- crl < not E, Sigma, Out > => < xraised(Vrz, Srz), Out' >
-   if < E, Sigma, Out > => < xraised(Vrz, Srz), Out' > .
- crl < len(E), Sigma, Out > => < xraised(Vrz, Srz), Out' >
-   if < E, Sigma, Out > => < xraised(Vrz, Srz), Out' > .
+ --- one evaluation of E1, then a dispatch [cycle 14: a raise in either operand
+ --- propagates; E2 is evaluated only when the short-circuit allows].
+ crl < E1 and E2, Sigma, Out > => CfgR
+   if < E1, Sigma, Out > => < EO1, Out1 >
+   /\ andK(EO1, E2, Sigma, Out1) => CfgR .
+ crl < E1 or E2, Sigma, Out > => CfgR
+   if < E1, Sigma, Out > => < EO1, Out1 >
+   /\ orK(EO1, E2, Sigma, Out1) => CfgR .
+  op andK : ExpOut Exp State Out -> Configuration .
+  op orK  : ExpOut Exp State Out -> Configuration .
+  rl andK(xraised(V, Sigma1), E2, Sigma, Out1) => < xraised(V, Sigma1), Out1 > .
+  rl orK(xraised(V, Sigma1), E2, Sigma, Out1)  => < xraised(V, Sigma1), Out1 > .
+ crl andK(V1, E2, Sigma, Out1) => < V1, Out1 >  if truthy(V1) ==Bool false .
+ crl andK(V1, E2, Sigma, Out1) => < EO2, Out2 >
+   if truthy(V1) ==Bool true /\ < E2, Sigma, Out1 > => < EO2, Out2 > .
+ crl orK(V1, E2, Sigma, Out1) => < V1, Out1 >   if truthy(V1) ==Bool true .
+ crl orK(V1, E2, Sigma, Out1) => < EO2, Out2 >
+   if truthy(V1) ==Bool false /\ < E2, Sigma, Out1 > => < EO2, Out2 > .
 
   --- ----- statements ----------------------------------------
   rl < pass, Sigma, Out > => < Sigma, Out > .
@@ -567,7 +478,15 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   eq setFrame(Sigma, consI(Xb, ILb), consVL(Vb, VLb)) = setFrame(Sigma[Vb / Xb], ILb, VLb) .
   op mkFrame : State State IdList ValueList -> State .
   eq mkFrame(Sigma, Cap, IL, VL)
-    = (markParams(setFrame(fill(stripMarks(Sigma), Cap, Cap, Sigma), IL, VL), IL))[true / fnFlag] .
+    = (markParams(setFrame(baseFrame(Sigma, Cap), IL, VL), IL))[true / fnFlag] .
+  --- A top-level function [Cap has no frame] needs nothing from Cap: the
+  --- caller's State already has every global.  A caller that is not a frame has
+  --- no markers to strip.
+  op baseFrame : State State -> State .
+  eq baseFrame(Sigma, Cap)
+    = if bound(Cap, fnFlag)
+      then fill(if bound(Sigma, fnFlag) then stripMarks(Sigma) else Sigma fi, Cap, Cap, Sigma)
+      else (if bound(Sigma, fnFlag) then stripMarks(Sigma) else Sigma fi) fi .
   op markParams : State IdList -> State .
   eq markParams(Sigma, nilI) = Sigma .
   eq markParams(Sigma, consI(Xb, ILb)) = markParams(Sigma[true / prm(Xb)], ILb) .
@@ -594,7 +513,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   vars Y : Id .
  ceq wbG(Sigma, (mut(Y) |-> V) & Sigma2, IL, SigmaF)
    = wbG(mutd(Sigma, Y, SigmaF(Y)), Sigma2, IL, SigmaF)
-   if (inIds(Y, IL) =/=Bool true) andBool (SigmaF(loc(Y)) =/=Bool true) andBool bound(Sigma, Y) .
+   if (inIds(Y, IL) =/=Bool true) andBool (SigmaF(loc(Y)) =/=Bool true) andBool (SigmaF(cap(Y)) =/=Bool true) andBool bound(Sigma, Y) .
   eq wbG(Sigma, (Y |-> V) & Sigma2, IL, SigmaF) = wbG(Sigma, Sigma2, IL, SigmaF) [owise] .
   eq wbG(Sigma, .State, IL, SigmaF) = Sigma .
   op wb : State IdList ExpList State -> State .
@@ -666,14 +585,11 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    if evalElts(EL, Sigma, Out) => < L, Out' > .
 
   --- len(t) for tuples [shares lstLen with lists].
- crl < len(E), Sigma, Out > => < lstLen(L), Out' >
-   if < E, Sigma, Out > => < tupV(L), Out' > .
+ rl un(oLen, tupV(L), Out') => < lstLen(L), Out' > .
 
   --- t ! i  for tuples [same indexing op as lists].
- crl < E1 ! E2, Sigma, Out > => < lstIdx(L, I), Out2 >
-   if < E1, Sigma, Out  > => < tupV(L), Out1 >
-   /\ < E2, Sigma, Out1 > => < I, Out2 >
-   /\ I >=Int 0
+ crl bin(oIdx, tupV(L), I, Out2) => < lstIdx(L, I), Out2 >
+   if I >=Int 0
    /\ I <Int lstLen(L) .
 
   --- Multi-assignment: a, b, ... = e   where e -> tupV(L) or listV(L).
@@ -685,10 +601,13 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   eq spreadAssign(Sigma, consI(Xs, ILs), cons(Vs, Ls))
     = spreadAssign(asgn(Sigma, Xs, Vs), ILs, Ls) .
 
- crl < multiAssign(IL, E), Sigma, Out > => < spreadAssign(Sigma, IL, L), Out' >
-   if < E, Sigma, Out > => < tupV(L), Out' > .
- crl < multiAssign(IL, E), Sigma, Out > => < spreadAssign(Sigma, IL, L), Out' >
-   if < E, Sigma, Out > => < listV(L), Out' > .
+ crl < multiAssign(IL, E), Sigma, Out > => CfgR
+   if < E, Sigma, Out > => < EO, Out' >
+   /\ maK(EO, IL, Sigma, Out') => CfgR .
+  op maK : ExpOut IdList State Out -> Configuration .
+  rl maK(tupV(L), IL, Sigma, Out')  => < spreadAssign(Sigma, IL, L), Out' > .
+  rl maK(listV(L), IL, Sigma, Out') => < spreadAssign(Sigma, IL, L), Out' > .
+  rl maK(xraised(V, Sigma1), IL, Sigma, Out') => < raised(V, Sigma1), Out' > .
 
   --- ----- lambda [cycle 10] --------------------------------
   --- lambdaExp(params, body)  evaluates to funcV(params, return(body), Sigma)
@@ -748,10 +667,8 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    /\ Sb := clampSliceStop(Vb, length(S)) .
 
   --- String indexing s[i] returns a 1-character string (CPython).
- crl < E1 ! E2, Sigma, Out > => < substr(S, Sa, 1), Out2 >
-   if < E1, Sigma, Out  > => < S, Out1 >
-   /\ < E2, Sigma, Out1 > => < Ih, Out2 >
-   /\ Sa := normIdx(Ih, length(S)) .
+ crl bin(oIdx, S, Ih, Out2) => < substr(S, Sa, 1), Out2 >
+   if Sa := normIdx(Ih, length(S)) .
 
   --- ----- dicts [cycle 9] ----------------------------------
   --- dict literal: evaluate keys and values left-to-right.
@@ -769,9 +686,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    if evalDEntries(DE, Sigma, Out) => < D, Out' > .
 
   --- dict subscript get: d ! k.
- crl < E1 ! E2, Sigma, Out > => < dictGet(D, Vk), Out2 >
-   if < E1, Sigma, Out  > => < dictV(D), Out1 >
-   /\ < E2, Sigma, Out1 > => < Vk, Out2 > .
+ rl bin(oIdx, dictV(D), Vk, Out2) => < dictGet(D, Vk), Out2 > .
 
   --- dict subscript set: d[k] = v.  Reuses the `_[_]:=_` Stmt op.
  crl < X [E1] := E2, Sigma, Out > => < Sigma[dictV(dictSet(D, Vk, Vd)) / X], Out2 >
@@ -780,13 +695,10 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    /\ < E2, Sigma, Out1 > => < Vd, Out2 > .
 
   --- len(d) for dicts.
- crl < len(E), Sigma, Out > => < dictLen(D), Out' >
-   if < E, Sigma, Out > => < dictV(D), Out' > .
+ rl un(oLen, dictV(D), Out') => < dictLen(D), Out' > .
 
   --- k in d  membership check [dict only — list/string `in` future].
- crl < E1 in E2, Sigma, Out > => < dictHas(D, Vk), Out2 >
-   if < E1, Sigma, Out  > => < Vk, Out1 >
-   /\ < E2, Sigma, Out1 > => < dictV(D), Out2 > .
+ rl bin(oIn, Vk, dictV(D), Out2) => < dictHas(D, Vk), Out2 > .
 
   --- ----- whole-program kickoff -----------------------------
   --- The program may end either with a State or with a ret[V] [if
