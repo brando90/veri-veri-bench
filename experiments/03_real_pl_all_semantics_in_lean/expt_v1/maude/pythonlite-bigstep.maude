@@ -457,7 +457,9 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
     if < E, Sigma, Out > => res(EO, Sigma1, Out') .
   op appK : ExpOut Id State Out -> Configuration .
  crl appK(V, X, Sigma1, Out') => < Sigma1[listV(lstAppend(L, V)) / hp(N)], Out' >
-   if ref(N) := look(Sigma1, X) /\ listV(L) := Sigma1(hp(N)) .
+   if unb(Sigma1, X) =/=Bool true /\ ref(N) := look(Sigma1, X) /\ listV(L) := Sigma1(hp(N)) .
+ crl appK(V, X, Sigma1, Out') => < raised("UnboundLocalError", Sigma1), Out' >
+   if unb(Sigma1, X) .   --- cycle 17: xs is a local that has no value yet
   rl appK(xraised(V, Sigma2), X, Sigma1, Out') => < raised(V, Sigma2), Out' > .
 
   --- xs[i] = v  [list: replace element i of the heap object; dict: set
@@ -471,7 +473,10 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  crl ix1(V1, X, E1, Sigma1, Out1) => ix2(V1, EO2, X, Sigma2, Out2)
     if < E1, Sigma1, Out1 > => res(EO2, Sigma2, Out2) .
   rl ix2(V1, xraised(V, Sigma3), X, Sigma2, Out2) => < raised(V, Sigma3), Out2 > .
-  rl ix2(V1, V2, X, Sigma2, Out2) => ix3(V1, V2, X, Sigma2, Out2) .
+ crl ix2(V1, V2, X, Sigma2, Out2) => ix3(V1, V2, X, Sigma2, Out2)
+   if unb(Sigma2, X) =/=Bool true .
+ crl ix2(V1, V2, X, Sigma2, Out2) => < raised("UnboundLocalError", Sigma2), Out2 >
+   if unb(Sigma2, X) .   --- cycle 17: the target is a local that has no value yet
  crl ix3(V1, I, X, Sigma2, Out2) => < Sigma2[listV(lstSet(L, I, V1)) / hp(N)], Out2 >
    if ref(N) := look(Sigma2, X) /\ listV(L) := Sigma2(hp(N)) /\ I >=Int 0 /\ I <Int lstLen(L) .
  crl ix3(V1, Vk, X, Sigma2, Out2) => < Sigma2[dictV(dictSet(D, Vk, V1)) / hp(N)], Out2 >

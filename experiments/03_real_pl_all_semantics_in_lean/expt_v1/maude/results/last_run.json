@@ -1,6 +1,6 @@
 {
-  "total": 76,
-  "pass":  76,
+  "total": 77,
+  "pass":  77,
   "fail":  0,
   "per_test": [
     {"name": "01_smoke", "status": "PASS", "reason": ""},
@@ -78,6 +78,7 @@
     {"name": "73_cyclic_container_eq", "status": "PASS", "reason": ""},
     {"name": "74_aug_assign_in_place", "status": "PASS", "reason": ""},
     {"name": "75_unbound_local", "status": "PASS", "reason": ""},
-    {"name": "76_call_heavy_binary_tree", "status": "PASS", "reason": ""}
+    {"name": "76_call_heavy_binary_tree", "status": "PASS", "reason": ""},
+    {"name": "77_unbound_local_append_subscript", "status": "PASS", "reason": ""}
   ]
 }
