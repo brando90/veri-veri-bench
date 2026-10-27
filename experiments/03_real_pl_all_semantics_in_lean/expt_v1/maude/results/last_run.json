@@ -1,6 +1,6 @@
 {
-  "total": 40,
-  "pass":  40,
+  "total": 41,
+  "pass":  41,
   "fail":  0,
   "per_test": [
     {"name": "01_smoke", "status": "PASS", "reason": ""},
@@ -42,6 +42,7 @@
     {"name": "37_state_on_raise", "status": "PASS", "reason": ""},
     {"name": "38_nested_loops_deep", "status": "PASS", "reason": ""},
     {"name": "39_nested_loops_trailing", "status": "PASS", "reason": ""},
-    {"name": "40_nested_loops_trailing_deep", "status": "PASS", "reason": ""}
+    {"name": "40_nested_loops_trailing_deep", "status": "PASS", "reason": ""},
+    {"name": "41_raise_through_call_chain", "status": "PASS", "reason": ""}
   ]
 }

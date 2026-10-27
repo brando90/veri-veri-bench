@@ -392,10 +392,16 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    /\ callRes(Outd, Sigma, Out2) => CfgR .
 
   --- callStmt: the value is discarded; a raise propagates as raised.
- crl < callStmt(F, EL), Sigma, Out > => < Sigma, Out2 >
-   if < callExp(F, EL), Sigma, Out > => < V, Out2 > .
- crl < callStmt(F, EL), Sigma, Out > => < raised(V, Sigma1), Out2 >
-   if < callExp(F, EL), Sigma, Out > => < raised(V, Sigma1), Out2 > .
+  --- One rule [QA, cycle 13]: the call runs once, then callStmtRes dispatches.
+  op callStmtRes : Outcome State Out -> Configuration .
+  rl callStmtRes(Sigma1, Sigma, Out2)            => < Sigma, Out2 > .
+  rl callStmtRes(ret(V), Sigma, Out2)            => < Sigma, Out2 > .
+  rl callStmtRes(raised(V, Sigma1), Sigma, Out2) => < raised(V, Sigma), Out2 > .
+ crl < callStmt(F, EL), Sigma, Out > => CfgR
+   if < F, Sigma, Out > => < funcV(IL, Body, Cap), Out0 >
+   /\ evalArgs(EL, Sigma, Out0) => < VL, OutA >
+   /\ < Body, Sigma & Cap & buildFrame(IL, VL), OutA > => < Outd, Out2 >
+   /\ callStmtRes(Outd, Sigma, Out2) => CfgR .
 
   --- ----- exceptions: raise / try-except ----------------
   --- raise e: evaluate e, propagate as raised[V, State at the raise] [cycle 13].
