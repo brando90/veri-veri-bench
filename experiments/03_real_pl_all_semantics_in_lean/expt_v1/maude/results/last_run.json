@@ -1,6 +1,6 @@
 {
-  "total": 35,
-  "pass":  35,
+  "total": 40,
+  "pass":  40,
   "fail":  0,
   "per_test": [
     {"name": "01_smoke", "status": "PASS", "reason": ""},
@@ -37,6 +37,11 @@
     {"name": "32_lambda", "status": "PASS", "reason": ""},
     {"name": "33_slicing", "status": "PASS", "reason": ""},
     {"name": "34_break_continue", "status": "PASS", "reason": ""},
-    {"name": "35_loop_edge_cases", "status": "PASS", "reason": ""}
+    {"name": "35_loop_edge_cases", "status": "PASS", "reason": ""},
+    {"name": "36_none_reads", "status": "PASS", "reason": ""},
+    {"name": "37_state_on_raise", "status": "PASS", "reason": ""},
+    {"name": "38_nested_loops_deep", "status": "PASS", "reason": ""},
+    {"name": "39_nested_loops_trailing", "status": "PASS", "reason": ""},
+    {"name": "40_nested_loops_trailing_deep", "status": "PASS", "reason": ""}
   ]
 }
