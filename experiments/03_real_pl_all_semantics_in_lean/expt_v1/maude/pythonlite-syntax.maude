@@ -86,6 +86,8 @@ mod PYTHONLITE-SYNTAX is including PYTHONLITE-VALUES + PYTHONLITE-STATE + PL-ID 
 
   op ifelse(_){_}else{_} : Exp Stmt Stmt -> Stmt [prec 59] .
   op while(_){_}         : Exp Stmt -> Stmt       [prec 59] .
+  op breakStmt           : -> Stmt .                    --- Python: break    [cycle 12]
+  op continueStmt        : -> Stmt .                    --- Python: continue [cycle 12]
 
   --- Functions [cycle 5/6]: def, return, call.
   --- We add the funcV constructor here [not in pythonlite-values.maude]
@@ -157,6 +159,11 @@ mod PYTHONLITE-SYNTAX is including PYTHONLITE-VALUES + PYTHONLITE-STATE + PL-ID 
   --- Python's three-arg slice  xs[a:b:c]  desugars at parse time
   --- into  slice3(xs, a, b, c)  with None for omitted bounds.
   op slice3 : Exp Exp Exp Exp -> Exp [prec 20] .
+
+  --- `None` literal as an expression.  `none` itself is a Value, and Value
+  --- is deliberately not subsorted under Exp (see the note at the top), so
+  --- slice3(xs, none, 2, none) and `x = None` were ill-sorted before this.
+  op noneE : -> Exp .
 
   --- Top-level program is just a Stmt.
   sort Pgm .
