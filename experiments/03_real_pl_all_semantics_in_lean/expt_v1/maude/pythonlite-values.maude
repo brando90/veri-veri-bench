@@ -41,6 +41,10 @@ mod PYTHONLITE-VALUES is
   sort ListObj .
   op nil  : -> ListObj [ctor] .
   op cons : Value ListObj -> ListObj [ctor] .
+  --- Cycle 16: a list / dict VARIABLE holds ref(N), the address of a heap object
+  --- hp(N) |-> listV(..) / dictV(..) kept in the State [pythonlite-bigstep.maude];
+  --- listV / dictV are the heap objects themselves, and tuples stay by value.
+  op ref   : Int -> Value [ctor] .
   op listV : ListObj -> Value [ctor] .
   op tupV  : ListObj -> Value [ctor] .   --- tuples (immutable lists, cycle 8)
 

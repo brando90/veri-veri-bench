@@ -1,6 +1,6 @@
 {
-  "total": 57,
-  "pass":  57,
+  "total": 71,
+  "pass":  71,
   "fail":  0,
   "per_test": [
     {"name": "01_smoke", "status": "PASS", "reason": ""},
@@ -59,6 +59,20 @@
     {"name": "54_dict_writeback", "status": "PASS", "reason": ""},
     {"name": "55_raise_in_literals", "status": "PASS", "reason": ""},
     {"name": "56_scoping_writeback_mix", "status": "PASS", "reason": ""},
-    {"name": "57_dict_duplicate_keys", "status": "PASS", "reason": ""}
+    {"name": "57_dict_duplicate_keys", "status": "PASS", "reason": ""},
+    {"name": "58_counter_closure_other_activation", "status": "PASS", "reason": ""},
+    {"name": "59_closure_late_binding", "status": "PASS", "reason": ""},
+    {"name": "60_closure_via_sibling", "status": "PASS", "reason": ""},
+    {"name": "61_same_var_two_params", "status": "PASS", "reason": ""},
+    {"name": "62_param_mutate_then_rebind", "status": "PASS", "reason": ""},
+    {"name": "63_nested_call_args", "status": "PASS", "reason": ""},
+    {"name": "64_eval_order_side_effects", "status": "PASS", "reason": ""},
+    {"name": "65_fid_collision_same_args", "status": "PASS", "reason": ""},
+    {"name": "66_alias_nested_and_return", "status": "PASS", "reason": ""},
+    {"name": "67_lambda_closure_mutation", "status": "PASS", "reason": ""},
+    {"name": "68_heap_aliasing", "status": "PASS", "reason": ""},
+    {"name": "69_heap_nested_containers", "status": "PASS", "reason": ""},
+    {"name": "70_heap_closures_counters", "status": "PASS", "reason": ""},
+    {"name": "71_heap_raise_and_loops", "status": "PASS", "reason": ""}
   ]
 }
