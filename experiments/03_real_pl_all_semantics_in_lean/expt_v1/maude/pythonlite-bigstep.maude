@@ -95,7 +95,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   vars S S1 S2 : String .    --- only match string values
   vars B T T1 T2 : Bool .    --- only match boolean values
   vars V V1 V2 Vrp : Value .     --- match anything
-  vars SigmaR SigmaF : State .
+  vars SigmaR : State .
   var CfgR : Configuration .
   vars EO : ExpOut .  vars AO : ArgsOut .  vars LO : ListOut .  vars DO : DictOut .
   --- Cycle 16: heap semantics.  The State is ONE bag of bindings:
@@ -114,7 +114,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   op cell : Int Id -> Id [ctor] .
   op hp : Int -> Id [ctor] .
   op par : Int -> Id [ctor] .
-  ops cur nxtC : -> Id [ctor] .
+  ops cur nxtC fid : -> Id [ctor] .
   op initS : -> State .
   eq initS = (cur |-> 0) & (nxtC |-> 1) .
   vars A A1 P N : Int .  vars L L1 L2 : ListObj .  vars D : DictObj .
@@ -144,19 +144,32 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   op deref : State Value -> Value .
   eq deref(Sigma, ref(N)) = Sigma(hp(N)) .
   eq deref(Sigma, V) = V [owise] .
-  --- deep(Sigma, V): V with every ref replaced by its object, all the way down
+  --- deep(Sigma, V): V with every ref replaced by its object, all the way down.
+  --- A ref met again on its own path [a self-containing list] is left as the ref,
+  --- so == and print terminate on cycles.
+  sort SeenL .
+  op nilS : -> SeenL [ctor] .
+  op sc : Int SeenL -> SeenL [ctor] .
+  op inS : Int SeenL -> Bool .
+  vars SN : Int .  var Sn : SeenL .
+  eq inS(SN, nilS) = false .
+  eq inS(SN, sc(SN, Sn)) = true .
+  eq inS(SN, sc(N, Sn)) = inS(SN, Sn) [owise] .
   op deep : State Value -> Value .
-  op deepL : State ListObj -> ListObj .
-  op deepD : State DictObj -> DictObj .
-  eq deep(Sigma, ref(N)) = deep(Sigma, Sigma(hp(N))) .
-  eq deep(Sigma, listV(L)) = listV(deepL(Sigma, L)) .
-  eq deep(Sigma, tupV(L)) = tupV(deepL(Sigma, L)) .
-  eq deep(Sigma, dictV(D)) = dictV(deepD(Sigma, D)) .
-  eq deep(Sigma, V) = V [owise] .
-  eq deepL(Sigma, nil) = nil .
-  eq deepL(Sigma, cons(V, L)) = cons(deep(Sigma, V), deepL(Sigma, L)) .
-  eq deepD(Sigma, nilD) = nilD .
-  eq deepD(Sigma, consD(V1, V2, D)) = consD(deep(Sigma, V1), deep(Sigma, V2), deepD(Sigma, D)) .
+  op deepS : State Value SeenL -> Value .
+  op deepL : State ListObj SeenL -> ListObj .
+  op deepD : State DictObj SeenL -> DictObj .
+  eq deep(Sigma, V) = deepS(Sigma, V, nilS) .
+ ceq deepS(Sigma, ref(N), Sn) = ref(N) if inS(N, Sn) .
+ ceq deepS(Sigma, ref(N), Sn) = deepS(Sigma, Sigma(hp(N)), sc(N, Sn)) if notBool inS(N, Sn) .
+  eq deepS(Sigma, listV(L), Sn) = listV(deepL(Sigma, L, Sn)) .
+  eq deepS(Sigma, tupV(L), Sn) = tupV(deepL(Sigma, L, Sn)) .
+  eq deepS(Sigma, dictV(D), Sn) = dictV(deepD(Sigma, D, Sn)) .
+  eq deepS(Sigma, V, Sn) = V [owise] .
+  eq deepL(Sigma, nil, Sn) = nil .
+  eq deepL(Sigma, cons(V, L), Sn) = cons(deepS(Sigma, V, Sn), deepL(Sigma, L, Sn)) .
+  eq deepD(Sigma, nilD, Sn) = nilD .
+  eq deepD(Sigma, consD(V1, V2, D), Sn) = consD(deepS(Sigma, V1, Sn), deepS(Sigma, V2, Sn), deepD(Sigma, D, Sn)) .
   --- alloc(O, Sigma, Out): put the fresh list / dict object O on the heap, result its ref
   op alloc : Value State Out -> Configuration .
  crl alloc(V, Sigma, Out) => res(ref(N), (Sigma[(N +Int 1) / nxtC])[V / hp(N)], Out)
@@ -365,7 +378,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   rl printK(V, Sigma1, Out')                 => < Sigma1, Out' :: deep(Sigma1, V) > .
   rl printK(xraised(V, Sigma2), Sigma1, Out') => < raised(V, Sigma2), Out' > .
 
-  --- xs.append[v]: rebind xs to xs + [v] [pure-value lists]; the argument is
+  --- xs.append[v]: append v to the heap object behind xs; the argument is
   --- evaluated first, then xs is read in the State it left [it may have
   --- changed xs through a call].
  crl < X .append(E), Sigma, Out > => CfgR
@@ -376,7 +389,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    if ref(N) := look(Sigma1, X) /\ listV(L) := Sigma1(hp(N)) .
   rl appK(xraised(V, Sigma2), X, Sigma1, Out') => < raised(V, Sigma2), Out' > .
 
-  --- xs[i] = v  [list: rebind xs to a copy with element i replaced; dict: set
+  --- xs[i] = v  [list: replace element i of the heap object; dict: set
   --- the key].  As in CPython the value is evaluated before the index.
   op ix1 : ExpOut Id Exp State Out -> Configuration .
   op ix2 : Value ExpOut Id State Out -> Configuration .
@@ -473,14 +486,15 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   vars IL : IdList .  vars Body : Stmt .  vars VL : ValueList .
   vars F : Exp .         --- function-position expression in callExp / callStmt
   vars Out0 OutA : Out . --- intermediate Out buffers in call evaluation
-  vars Cap : State .     --- captured State at function-def time (cycle 6)
+  vars Cap : State .     --- captured (cur |-> defining activation) and (fid |-> function identity) [cycle 16]
   vars FV : Value .
 
   --- def f[params]: body  -- bind f in current state to a function value.
   --- Inside a frame the captured State also records the function's own name
   --- [self], so a nested function can call itself [cycle 15].
- rl < def(X, IL, Body), Sigma, Out >
-    => < asgn(Sigma, X, funcV(IL, Body, capOf(Sigma))), Out > .
+ crl < def(X, IL, Body), Sigma, Out >
+    => < asgn(Sigma[(N +Int 1) / nxtC], X, funcV(IL, Body, capOf(Sigma) & (fid |-> N))), Out >
+   if N := Sigma(nxtC) .    --- fid: a fresh function identity, so two separately made functions never compare equal
 
   --- bare return  -->  return None
   rl < return, Sigma, Out > => < ret(none, Sigma), Out > .
@@ -527,9 +541,9 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   --- Function call as expression [cycle 13: one rule; the body runs once].
   --- Body returned a value -> that value.  Body completed normally -> None.
   --- Body raised -> the exception propagates, with the caller's State
-  --- after the write-back [the callee's frame is discarded].  An argument
+  --- after the call [the callee's cells stay on the heap, its activation is left].  An argument
   --- that raises propagates too.  The call's result carries the caller's
-  --- State after the write-back [cycle 15].
+  --- State after the call [cycle 15, heap cycle 16].
   op callRes : Outcome Int Out -> Configuration .
   rl callRes(ret(V, SigmaR), A, Out2)    => res(V, restore(SigmaR, A), Out2) .
   rl callRes(Sigma1, A, Out2)            => res(none, restore(Sigma1, A), Out2) .
@@ -610,7 +624,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    if I >=Int 0
    /\ I <Int lstLen(L) .
 
-  --- Multi-assignment: a, b, ... = e   where e -> tupV(L) or listV(L).
+  --- Multi-assignment: a, b, ... = e   where e -> tupV(L) or a ref to a list.
   --- Bind each id in IdList to the corresponding element of L; arity
   --- mismatch leaves the assignment stuck [v2 will surface a ValueError].
   op spreadAssign : State IdList ListObj -> State .
@@ -629,9 +643,10 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   rl maK(xraised(V, Sigma2), IL, Sigma1, Out') => < raised(V, Sigma2), Out' > .
 
   --- ----- lambda [cycle 10] --------------------------------
-  --- lambdaExp(params, body)  evaluates to funcV(params, return(body), Sigma)
-  --- where Sigma is the current state (closure-equivalent behaviour).
- rl < lambdaExp(IL, E), Sigma, Out > => res(funcV(IL, return(E), capOf(Sigma)), Sigma, Out) .
+  --- lambdaExp(params, body)  evaluates to funcV(params, return(body), cap)
+  --- where cap names the defining activation and a fresh function identity.
+ crl < lambdaExp(IL, E), Sigma, Out > => res(funcV(IL, return(E), capOf(Sigma) & (fid |-> N)), Sigma[(N +Int 1) / nxtC], Out)
+   if N := Sigma(nxtC) .
 
   --- None literal evaluates to the none value.
  rl < noneE, Sigma, Out > => res(none, Sigma, Out) .

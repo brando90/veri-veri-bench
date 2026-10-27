@@ -1,6 +1,6 @@
 {
-  "total": 71,
-  "pass":  71,
+  "total": 73,
+  "pass":  73,
   "fail":  0,
   "per_test": [
     {"name": "01_smoke", "status": "PASS", "reason": ""},
@@ -73,6 +73,8 @@
     {"name": "68_heap_aliasing", "status": "PASS", "reason": ""},
     {"name": "69_heap_nested_containers", "status": "PASS", "reason": ""},
     {"name": "70_heap_closures_counters", "status": "PASS", "reason": ""},
-    {"name": "71_heap_raise_and_loops", "status": "PASS", "reason": ""}
+    {"name": "71_heap_raise_and_loops", "status": "PASS", "reason": ""},
+    {"name": "72_function_identity", "status": "PASS", "reason": ""},
+    {"name": "73_cyclic_container_eq", "status": "PASS", "reason": ""}
   ]
 }
