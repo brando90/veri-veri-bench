@@ -82,7 +82,7 @@ Each **cycle** is one new Python feature, end-to-end (syntax → parser → Maud
 | 9     | dicts                                       | Done        | " |
 | 10    | lambdas                                     | Done        | " |
 | 11    | slicing (`xs[a:b]`, negative bounds, lists / tuples / strings) | Done (2026-10-27; had been wired but never ran) | 35 / 35 |
-| 12    | `break` / `continue` (while, for, inside try); negative-step `range` | Done (2026-10-27) | 35 / 35 |
+| 12    | `break` / `continue` (while, for, inside try); literal negative-step `range` | Done (2026-10-27) | 35 / 35 |
 | 13+   | classes / generators / exception classes / default args | TODO (v2)   | — |
 
 (Status reflects the **end of this PR's commit chain**; per-cycle commit hashes are in `expt_v1/maude/results/cycles_log.md`.)
