@@ -1,6 +1,6 @@
 {
-  "total": 41,
-  "pass":  41,
+  "total": 47,
+  "pass":  47,
   "fail":  0,
   "per_test": [
     {"name": "01_smoke", "status": "PASS", "reason": ""},
@@ -43,6 +43,12 @@
     {"name": "38_nested_loops_deep", "status": "PASS", "reason": ""},
     {"name": "39_nested_loops_trailing", "status": "PASS", "reason": ""},
     {"name": "40_nested_loops_trailing_deep", "status": "PASS", "reason": ""},
-    {"name": "41_raise_through_call_chain", "status": "PASS", "reason": ""}
+    {"name": "41_raise_through_call_chain", "status": "PASS", "reason": ""},
+    {"name": "42_param_shadowing", "status": "PASS", "reason": ""},
+    {"name": "43_raise_in_expression_call", "status": "PASS", "reason": ""},
+    {"name": "44_list_append_in_callee", "status": "PASS", "reason": ""},
+    {"name": "45_shadow_edge", "status": "PASS", "reason": ""},
+    {"name": "46_raise_expr_edge", "status": "PASS", "reason": ""},
+    {"name": "47_alias_edge", "status": "PASS", "reason": ""}
   ]
 }
