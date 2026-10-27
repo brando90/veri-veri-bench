@@ -243,6 +243,12 @@ def emit_stmt(n: ast.AST) -> str:
             # Loop:  idx = start; while idx < stop: x = idx; idx = idx + step; body
             # The counter is bumped *before* the body so `continue` cannot skip it.
             # A literal negative step (range(5, 0, -1)) counts down, so the test is `>`.
+            if len(args) == 3 and not (
+                    isinstance(args[2], ast.Constant)
+                    or (isinstance(args[2], ast.UnaryOp) and isinstance(args[2].op, ast.USub)
+                        and isinstance(args[2].operand, ast.Constant))):
+                # the loop test (< or >) is chosen from the step's sign at parse time
+                raise SystemExit(UNSUPPORTED + "range() with a non-literal step")
             neg = (len(args) == 3 and isinstance(args[2], ast.UnaryOp)
                    and isinstance(args[2].op, ast.USub)
                    and isinstance(args[2].operand, ast.Constant))
