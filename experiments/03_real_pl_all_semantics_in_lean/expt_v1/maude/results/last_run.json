@@ -1,6 +1,6 @@
 {
-  "total": 32,
-  "pass":  32,
+  "total": 35,
+  "pass":  35,
   "fail":  0,
   "per_test": [
     {"name": "01_smoke", "status": "PASS", "reason": ""},
@@ -34,6 +34,9 @@
     {"name": "29_multi_assign_swap", "status": "PASS", "reason": ""},
     {"name": "30_dict_basic", "status": "PASS", "reason": ""},
     {"name": "31_dict_in", "status": "PASS", "reason": ""},
-    {"name": "32_lambda", "status": "PASS", "reason": ""}
+    {"name": "32_lambda", "status": "PASS", "reason": ""},
+    {"name": "33_slicing", "status": "PASS", "reason": ""},
+    {"name": "34_break_continue", "status": "PASS", "reason": ""},
+    {"name": "35_loop_edge_cases", "status": "PASS", "reason": ""}
   ]
 }

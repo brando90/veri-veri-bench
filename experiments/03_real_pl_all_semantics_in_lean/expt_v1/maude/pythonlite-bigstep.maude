@@ -30,6 +30,10 @@ mod PYTHONLITE-CONFIGURATIONS-BIGSTEP is
   subsort State < Outcome .
   op ret    : Value -> Outcome [ctor] .   --- early return (cycle 5)
   op raised : Value -> Outcome [ctor] .   --- raised exception (cycle 7)
+  --- break / continue (cycle 12): unlike ret / raised they carry the State
+  --- at the point of the jump, because the enclosing loop keeps running in it.
+  op brk    : State -> Outcome [ctor] .   --- break out of the nearest loop
+  op cnt    : State -> Outcome [ctor] .   --- continue with the next iteration
 
   sort Configuration .
   --- expression configurations [Value-result]
@@ -287,6 +291,14 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  crl < St1 ; St2, Sigma, Out > => < raised(V), Out1 >
    if < St1, Sigma, Out > => < raised(V), Out1 > .
 
+  --- break / continue in S1 -> skip S2, propagate to the enclosing loop [cycle 12].
+ rl < breakStmt,    Sigma, Out > => < brk(Sigma), Out > .
+ rl < continueStmt, Sigma, Out > => < cnt(Sigma), Out > .
+ crl < St1 ; St2, Sigma, Out > => < brk(Sigma1), Out1 >
+   if < St1, Sigma, Out > => < brk(Sigma1), Out1 > .
+ crl < St1 ; St2, Sigma, Out > => < cnt(Sigma1), Out1 >
+   if < St1, Sigma, Out > => < cnt(Sigma1), Out1 > .
+
   --- if uses truthy[_] to match Python's "any value can be a condition"
  crl < ifelse(E){ St1 }else{ St2 }, Sigma, Out > => < Outc1, Out2 >
    if < E,  Sigma, Out  > => < V, Out1 >
@@ -312,6 +324,22 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    if < E,  Sigma, Out  > => < Vrp, Out1 >
    /\ truthy(Vrp) ==Bool true
    /\ < St, Sigma, Out1 > => < ret(V), Out2 > .
+  --- while: body raised -> propagate (the state is dropped, as for try/except).
+ crl < while(E){ St }, Sigma, Out > => < raised(V), Out2 >
+   if < E,  Sigma, Out  > => < Vrp, Out1 >
+   /\ truthy(Vrp) ==Bool true
+   /\ < St, Sigma, Out1 > => < raised(V), Out2 > .
+  --- while: body hit break -> leave the loop normally in the state at the break [cycle 12].
+ crl < while(E){ St }, Sigma, Out > => < Sigma1, Out2 >
+   if < E,  Sigma, Out  > => < Vrp, Out1 >
+   /\ truthy(Vrp) ==Bool true
+   /\ < St, Sigma, Out1 > => < brk(Sigma1), Out2 > .
+  --- while: body hit continue -> test the condition again in the state at the continue [cycle 12].
+ crl < while(E){ St }, Sigma, Out > => < Outc2, Out3 >
+   if < E,  Sigma, Out  > => < Vrp, Out1 >
+   /\ truthy(Vrp) ==Bool true
+   /\ < St, Sigma, Out1 > => < cnt(Sigma1), Out2 >
+   /\ < while(E){ St }, Sigma1, Out2 > => < Outc2, Out3 > .
 
   --- ----- functions: def / return / call ------------------
   vars IL : IdList .  vars Body : Stmt .  vars VL : ValueList .
@@ -377,6 +405,11 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   --- [b] Body returned -> propagate ret without invoking handler.
  crl < tryexcept(Body, X, St1), Sigma, Out > => < ret(V), Out2 >
    if < Body, Sigma, Out > => < ret(V), Out2 > .
+  --- [b2] Body hit break / continue -> propagate to the enclosing loop [cycle 12].
+ crl < tryexcept(Body, X, St1), Sigma, Out > => < brk(Sigma1), Out2 >
+   if < Body, Sigma, Out > => < brk(Sigma1), Out2 > .
+ crl < tryexcept(Body, X, St1), Sigma, Out > => < cnt(Sigma1), Out2 >
+   if < Body, Sigma, Out > => < cnt(Sigma1), Out2 > .
   --- [c] Body raised -> bind exception to x, run handler in updated state.
  crl < tryexcept(Body, X, St1), Sigma, Out > => < Outc1, Out2 >
    if < Body, Sigma, Out > => < raised(V), Out1 >
@@ -438,6 +471,9 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   --- where Sigma is the current state (closure-equivalent behaviour).
  rl < lambdaExp(IL, E), Sigma, Out > => < funcV(IL, return(E), Sigma), Out > .
 
+  --- None literal evaluates to the none value.
+ rl < noneE, Sigma, Out > => < none, Out > .
+
   --- ----- slicing [cycle 11] -------------------------------
   --- xs[a:b]  with  a, b  either Int or none.  Negative indices are
   --- Python-style: len + i.  Out-of-range bounds are clamped.
@@ -446,12 +482,14 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   op clampSliceStart : Value Int -> Int .
   op clampSliceStop  : Value Int -> Int .
   op normIdx : Int Int -> Int .   --- normIdx(i, n): negative -> n+i, then clamp [0..n]
-  vars Nh : Int .
-  eq normIdx(Ih, Nh) =
-    if Ih <Int 0
-    then (if Ih +Int Nh <Int 0 then 0 else Ih +Int Nh fi)
-    else (if Ih >Int Nh then Nh else Ih fi)
-    fi .
+  --- Variables are declared before first use (Maude requires this).
+  vars Sa Sb : Int .  vars Va Vb Vs : Value .  vars Ea Eb Es E0 : Exp .
+  --- normIdx via conditional equations (the built-in if_then_else_fi
+  --- is not regular over our Int/Value sorts and failed preregularity).
+ ceq normIdx(Ih, Nh) = 0                if Ih <Int 0 /\ Ih +Int Nh <Int 0 .
+ ceq normIdx(Ih, Nh) = Ih +Int Nh       if Ih <Int 0 /\ Ih +Int Nh >=Int 0 .
+ ceq normIdx(Ih, Nh) = Nh               if Ih >=Int 0 /\ Ih >Int Nh .
+ ceq normIdx(Ih, Nh) = Ih               if Ih >=Int 0 /\ Ih <=Int Nh .
   eq clampSliceStart(none, Nh) = 0 .
   eq clampSliceStart(Ih, Nh) = normIdx(Ih, Nh) .
   eq clampSliceStop(none, Nh) = Nh .
@@ -466,7 +504,6 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    /\ Sa := clampSliceStart(Va, lstLen(L)) 
    /\ Sb := clampSliceStop(Vb, lstLen(L)) .
   --- [step Es is ignored in v1; only the no-step / step-1 case is correct]
-  vars Sa Sb : Int .  vars Va Vb Vs : Value .  vars Ea Eb Es E0 : Exp .
 
   --- Slice on tuple.
  crl < slice3(E0, Ea, Eb, Es), Sigma, Out > => < tupV(lstSlice(L, Sa, Sb)), Out3 >
@@ -478,7 +515,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    /\ Sb := clampSliceStop(Vb, lstLen(L)) .
 
   --- Slice on string.
- crl < slice3(E0, Ea, Eb, Es), Sigma, Out > => < substr(S, Sa, Sb -Int Sa), Out3 >
+ crl < slice3(E0, Ea, Eb, Es), Sigma, Out > => < substr(S, Sa, maxInt(Sb -Int Sa, 0)), Out3 >
    if < E0, Sigma, Out  > => < S, Out1 >
    /\ < Ea, Sigma, Out1 > => < Va, Out2 >
    /\ < Eb, Sigma, Out2 > => < Vb, Out3 >

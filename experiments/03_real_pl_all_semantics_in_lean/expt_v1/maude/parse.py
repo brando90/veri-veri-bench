@@ -31,7 +31,7 @@ def fresh(prefix: str = "__i") -> str:
 def emit_expr(n: ast.AST) -> str:
     if isinstance(n, ast.Constant):
         if n.value is None:
-            return "none"
+            return "noneE"
         if isinstance(n.value, bool):
             return "true" if n.value else "false"
         if isinstance(n.value, int):
@@ -120,13 +120,13 @@ def emit_expr(n: ast.AST) -> str:
         return f"dictLit({entries})"
     if isinstance(n, ast.Subscript):
         # Python:  xs[i]    ->   (xs ! i)
-        # Python:  xs[a:b]   ->   slice3(xs, a, b, none)
+        # Python:  xs[a:b]   ->   slice3(xs, a, b, noneE)
         # Python:  xs[a:b:c] ->   slice3(xs, a, b, c)  -- step !=1 unsupported semantically
         if isinstance(n.slice, ast.Slice):
             sl = n.slice
-            lo = emit_expr(sl.lower) if sl.lower is not None else "none"
-            hi = emit_expr(sl.upper) if sl.upper is not None else "none"
-            st = emit_expr(sl.step)  if sl.step  is not None else "none"
+            lo = emit_expr(sl.lower) if sl.lower is not None else "noneE"
+            hi = emit_expr(sl.upper) if sl.upper is not None else "noneE"
+            st = emit_expr(sl.step)  if sl.step  is not None else "noneE"
             return f"slice3({emit_expr(n.value)}, {lo}, {hi}, {st})"
         return f"({emit_expr(n.value)} ! {emit_expr(n.slice)})"
     if isinstance(n, ast.Lambda):
@@ -240,11 +240,17 @@ def emit_stmt(n: ast.AST) -> str:
             else:
                 start, stop, step = emit_expr(args[0]), emit_expr(args[1]), emit_expr(args[2])
             body = emit_block(n.body)
-            # Loop:  idx = start; while idx < stop: x = idx; body; idx = idx + step
+            # Loop:  idx = start; while idx < stop: x = idx; idx = idx + step; body
+            # The counter is bumped *before* the body so `continue` cannot skip it.
+            # A literal negative step (range(5, 0, -1)) counts down, so the test is `>`.
+            neg = (len(args) == 3 and isinstance(args[2], ast.UnaryOp)
+                   and isinstance(args[2].op, ast.USub)
+                   and isinstance(args[2].operand, ast.Constant))
+            cmp_op = ">" if neg else "<"
             return (
                 f"({idx} := {start}) ; "
-                f"while(({idx} < {stop}))" + "{"
-                + f"({loopvar} := {idx}) ; {body} ; ({idx} := ({idx} + {step}))"
+                f"while(({idx} {cmp_op} {stop}))" + "{"
+                + f"({loopvar} := {idx}) ; ({idx} := ({idx} + {step})) ; {body}"
                 + "}"
             )
         # General case: iterate over a list expression by index.
@@ -255,7 +261,7 @@ def emit_stmt(n: ast.AST) -> str:
             f"({listsrc} := {iter_expr}) ; "
             f"({idx} := 0) ; "
             f"while(({idx} < len({listsrc})))" + "{"
-            + f"({loopvar} := ({listsrc} ! {idx})) ; {body} ; ({idx} := ({idx} + 1))"
+            + f"({loopvar} := ({listsrc} ! {idx})) ; ({idx} := ({idx} + 1)) ; {body}"
             + "}"
         )
     if isinstance(n, ast.FunctionDef):
@@ -301,6 +307,10 @@ def emit_stmt(n: ast.AST) -> str:
         body = emit_block(n.body)
         handler = emit_block(h.body)
         return f"tryexcept(({body}), '{var_id}, ({handler}))"
+    if isinstance(n, ast.Break):
+        return "breakStmt"
+    if isinstance(n, ast.Continue):
+        return "continueStmt"
     if isinstance(n, ast.Pass):
         return "pass"
     raise SystemExit(UNSUPPORTED + f"stmt node {type(n).__name__}")
