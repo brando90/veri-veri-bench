@@ -29,7 +29,9 @@ mod PYTHONLITE-CONFIGURATIONS-BIGSTEP is
   sort Outcome .
   subsort State < Outcome .
   op ret    : Value -> Outcome [ctor] .   --- early return (cycle 5)
-  op raised : Value -> Outcome [ctor] .   --- raised exception (cycle 7)
+  --- raised carries the State at the raise (cycle 13), like brk / cnt, so a
+  --- handler sees the assignments made before the raise (CPython does).
+  op raised : Value State -> Outcome [ctor] .   --- raised exception (cycle 7, state added cycle 13)
   --- break / continue (cycle 12): unlike ret / raised they carry the State
   --- at the point of the jump, because the enclosing loop keeps running in it.
   op brk    : State -> Outcome [ctor] .   --- break out of the nearest loop
@@ -73,6 +75,10 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   vars S S1 S2 : String .    --- only match string values
   vars B T T1 T2 : Bool .    --- only match boolean values
   vars V V1 V2 Vrp : Value .     --- match anything
+  --- bound(Sigma, X): X has a binding in Sigma, possibly to `none` (cycle 13).
+  op bound : State Id -> Bool .
+  eq bound(Sigma & X |-> V, X) = true .
+  eq bound(Sigma, X) = false [owise] .
   vars E E1 E2 : Exp .
   vars St St1 St2 : Stmt .
 
@@ -83,7 +89,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
 
   --- variable lookup
  crl < X,    Sigma, Out > => < Sigma(X), Out >
-   if Sigma(X) =/=Bool none .
+   if bound(Sigma, X) .   --- a variable bound to None is a real binding (cycle 13)
 
   --- ----- arithmetic [Int + Int = Int] ----------------------
  crl < E1 + E2, Sigma, Out > => < I1 +Int I2, Out2 >
@@ -278,26 +284,28 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   --- ----- sequence: normal flow OR early return ------------
   vars Outc Outc1 Outc2 : Outcome .
 
-  --- Normal flow: S1 produces a State, then S2 runs in that State.
+  --- Cycle 13: ONE rule per construct.  The old shape had one rule per
+  --- outcome of St1 [normal / ret / raised / brk / cnt], and each rule
+  --- re-ran St1 inside its condition, so every nesting level multiplied the
+  --- work by ~20.  Now St1 runs once, and a helper op dispatches on the
+  --- Outcome by pattern [exactly one of its rules can apply].
+  op seqK : Outcome Stmt Out -> Configuration .
+  vars Outd : Outcome .
+  --- normal flow: S2 runs in the State S1 produced.
+ crl seqK(Sigma1, St2, Out1) => < Outc2, Out2 >
+   if < St2, Sigma1, Out1 > => < Outc2, Out2 > .
+  --- ret / raised / brk / cnt in S1 short-circuit: S2 is skipped.
+  rl seqK(ret(V), St2, Out1)      => < ret(V), Out1 > .
+  rl seqK(raised(V, Sigma1), St2, Out1) => < raised(V, Sigma1), Out1 > .
+  rl seqK(brk(Sigma1), St2, Out1) => < brk(Sigma1), Out1 > .
+  rl seqK(cnt(Sigma1), St2, Out1) => < cnt(Sigma1), Out1 > .
  crl < St1 ; St2, Sigma, Out > => < Outc2, Out2 >
-   if < St1, Sigma,  Out  > => < Sigma1, Out1 >    --- Sigma1 : State
-   /\ < St2, Sigma1, Out1 > => < Outc2,  Out2 > .
+   if < St1, Sigma, Out > => < Outd, Out1 >
+   /\ seqK(Outd, St2, Out1) => < Outc2, Out2 > .
 
-  --- Early return: S1 returns -> short-circuit, propagate ret upward.
- crl < St1 ; St2, Sigma, Out > => < ret(V), Out1 >
-   if < St1, Sigma, Out > => < ret(V), Out1 > .
-
-  --- Exception in S1 -> short-circuit, propagate raised upward.
- crl < St1 ; St2, Sigma, Out > => < raised(V), Out1 >
-   if < St1, Sigma, Out > => < raised(V), Out1 > .
-
-  --- break / continue in S1 -> skip S2, propagate to the enclosing loop [cycle 12].
+  --- break / continue [cycle 12]: carry the State at the jump.
  rl < breakStmt,    Sigma, Out > => < brk(Sigma), Out > .
  rl < continueStmt, Sigma, Out > => < cnt(Sigma), Out > .
- crl < St1 ; St2, Sigma, Out > => < brk(Sigma1), Out1 >
-   if < St1, Sigma, Out > => < brk(Sigma1), Out1 > .
- crl < St1 ; St2, Sigma, Out > => < cnt(Sigma1), Out1 >
-   if < St1, Sigma, Out > => < cnt(Sigma1), Out1 > .
 
   --- if uses truthy[_] to match Python's "any value can be a condition"
  crl < ifelse(E){ St1 }else{ St2 }, Sigma, Out > => < Outc1, Out2 >
@@ -309,37 +317,29 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    /\ truthy(V) ==Bool false
    /\ < St2, Sigma, Out1 > => < Outc2, Out2 > .
 
-  --- while: condition false -> exit normally.
- crl < while(E){ St }, Sigma, Out > => < Sigma, Out' >
-   if < E, Sigma, Out > => < V, Out' >
-   /\ truthy(V) ==Bool false .
-  --- while: body completes normally -> iterate.
- crl < while(E){ St }, Sigma, Out > => < Outc2, Out3 >
-   if < E,  Sigma, Out  > => < V, Out1 >
-   /\ truthy(V) ==Bool true
-   /\ < St, Sigma, Out1 > => < Sigma1, Out2 >        --- Sigma1 : State (no return)
-   /\ < while(E){ St }, Sigma1, Out2 > => < Outc2, Out3 > .
-  --- while: body returned -> propagate.
- crl < while(E){ St }, Sigma, Out > => < ret(V), Out2 >
-   if < E,  Sigma, Out  > => < Vrp, Out1 >
-   /\ truthy(Vrp) ==Bool true
-   /\ < St, Sigma, Out1 > => < ret(V), Out2 > .
-  --- while: body raised -> propagate (the state is dropped, as for try/except).
- crl < while(E){ St }, Sigma, Out > => < raised(V), Out2 >
-   if < E,  Sigma, Out  > => < Vrp, Out1 >
-   /\ truthy(Vrp) ==Bool true
-   /\ < St, Sigma, Out1 > => < raised(V), Out2 > .
-  --- while: body hit break -> leave the loop normally in the state at the break [cycle 12].
- crl < while(E){ St }, Sigma, Out > => < Sigma1, Out2 >
-   if < E,  Sigma, Out  > => < Vrp, Out1 >
-   /\ truthy(Vrp) ==Bool true
-   /\ < St, Sigma, Out1 > => < brk(Sigma1), Out2 > .
-  --- while: body hit continue -> test the condition again in the state at the continue [cycle 12].
- crl < while(E){ St }, Sigma, Out > => < Outc2, Out3 >
-   if < E,  Sigma, Out  > => < Vrp, Out1 >
-   /\ truthy(Vrp) ==Bool true
-   /\ < St, Sigma, Out1 > => < cnt(Sigma1), Out2 >
-   /\ < while(E){ St }, Sigma1, Out2 > => < Outc2, Out3 > .
+  --- while [cycle 13: one rule; the body runs once per iteration].
+  op whileK  : Bool Exp Stmt State Out -> Configuration .   --- condition value decided
+  op whileB  : Outcome Exp Stmt Out -> Configuration .      --- body outcome decided
+ crl < while(E){ St }, Sigma, Out > => < Outc2, Out2 >
+   if < E, Sigma, Out > => < V, Out1 >
+   /\ whileK(truthy(V), E, St, Sigma, Out1) => < Outc2, Out2 > .
+  --- condition false -> exit normally.
+  rl whileK(false, E, St, Sigma, Out1) => < Sigma, Out1 > .
+  --- condition true -> run the body once and dispatch on its outcome.
+ crl whileK(true, E, St, Sigma, Out1) => < Outc2, Out3 >
+   if < St, Sigma, Out1 > => < Outd, Out2 >
+   /\ whileB(Outd, E, St, Out2) => < Outc2, Out3 > .
+  --- body completed normally, or hit continue: test the condition again
+  --- in the State at that point.
+ crl whileB(Sigma1, E, St, Out2) => < Outc2, Out3 >
+   if < while(E){ St }, Sigma1, Out2 > => < Outc2, Out3 > .
+ crl whileB(cnt(Sigma1), E, St, Out2) => < Outc2, Out3 >
+   if < while(E){ St }, Sigma1, Out2 > => < Outc2, Out3 > .
+  --- body hit break: leave the loop normally in the State at the break.
+  rl whileB(brk(Sigma1), E, St, Out2) => < Sigma1, Out2 > .
+  --- body returned / raised: propagate.
+  rl whileB(ret(V), E, St, Out2) => < ret(V), Out2 > .
+  rl whileB(raised(V, Sigma1), E, St, Out2) => < raised(V, Sigma1), Out2 > .
 
   --- ----- functions: def / return / call ------------------
   vars IL : IdList .  vars Body : Stmt .  vars VL : ValueList .
@@ -375,66 +375,53 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   --- mismatched arg count: undefined frame [arity-mismatch surface error
   --- deferred to cycle 7].
 
-  --- Function call as expression.
-  --- [a] Body returned a value via `return e`  --> use that value.
- crl < callExp(F, EL), Sigma, Out > => < V, Out2 >
+  --- Function call as expression [cycle 13: one rule; the body runs once].
+  --- Body returned a value -> that value.  Body completed normally -> None.
+  --- Body raised -> the exception propagates [the caller's own State, since
+  --- the callee's frame is discarded].  Anything the callee could not
+  --- finish by break / continue is not a call result and stays stuck.
+  op callRes : Outcome State Out -> Configuration .
+  var CfgR : Configuration .
+  rl callRes(ret(V), Sigma, Out2)        => < V, Out2 > .
+  rl callRes(Sigma1, Sigma, Out2)        => < none, Out2 > .
+  rl callRes(raised(V, Sigma1), Sigma, Out2) => < raised(V, Sigma), Out2 > .
+ crl < callExp(F, EL), Sigma, Out > => CfgR
    if < F, Sigma, Out > => < funcV(IL, Body, Cap), Out0 >
    /\ evalArgs(EL, Sigma, Out0) => < VL, OutA >
-   /\ < Body, Sigma & Cap & buildFrame(IL, VL), OutA > => < ret(V), Out2 > .
-  --- [b] Body completed normally [no return]  --> result is None.
- crl < callExp(F, EL), Sigma, Out > => < none, Out2 >
-   if < F, Sigma, Out > => < funcV(IL, Body, Cap), Out0 >
-   /\ evalArgs(EL, Sigma, Out0) => < VL, OutA >
-   /\ < Body, Sigma & Cap & buildFrame(IL, VL), OutA > => < SigmaB, Out2 >
-   .   --- SigmaB : State (subsort match — the no-return case)
+   /\ < Body, Sigma & Cap & buildFrame(IL, VL), OutA > => < Outd, Out2 >
+   /\ callRes(Outd, Sigma, Out2) => CfgR .
 
-  --- callStmt: same as callExp but the value is discarded.
- crl < callStmt(F, EL), Sigma, Out > => < Sigma, Out2 >
-   if < callExp(F, EL), Sigma, Out > => < V, Out2 > .
+  --- callStmt: the value is discarded; a raise propagates as raised.
+  --- One rule [QA, cycle 13]: the call runs once, then callStmtRes dispatches.
+  op callStmtRes : Outcome State Out -> Configuration .
+  rl callStmtRes(Sigma1, Sigma, Out2)            => < Sigma, Out2 > .
+  rl callStmtRes(ret(V), Sigma, Out2)            => < Sigma, Out2 > .
+  rl callStmtRes(raised(V, Sigma1), Sigma, Out2) => < raised(V, Sigma), Out2 > .
+ crl < callStmt(F, EL), Sigma, Out > => CfgR
+   if < F, Sigma, Out > => < funcV(IL, Body, Cap), Out0 >
+   /\ evalArgs(EL, Sigma, Out0) => < VL, OutA >
+   /\ < Body, Sigma & Cap & buildFrame(IL, VL), OutA > => < Outd, Out2 >
+   /\ callStmtRes(Outd, Sigma, Out2) => CfgR .
 
   --- ----- exceptions: raise / try-except ----------------
-  --- raise e: evaluate e, propagate as raised[V].
- crl < raise(E), Sigma, Out > => < raised(V), Out' >
+  --- raise e: evaluate e, propagate as raised[V, State at the raise] [cycle 13].
+ crl < raise(E), Sigma, Out > => < raised(V, Sigma), Out' >
    if < E, Sigma, Out > => < V, Out' > .
 
-  --- try { body } except as x { handler }
-  --- [a] Body completed normally -> tryexcept yields the same outcome
-  ---     as body, no handler invocation.
- crl < tryexcept(Body, X, St1), Sigma, Out > => < SigmaB, Out2 >
-   if < Body, Sigma, Out > => < SigmaB, Out2 > .
-  --- [b] Body returned -> propagate ret without invoking handler.
- crl < tryexcept(Body, X, St1), Sigma, Out > => < ret(V), Out2 >
-   if < Body, Sigma, Out > => < ret(V), Out2 > .
-  --- [b2] Body hit break / continue -> propagate to the enclosing loop [cycle 12].
- crl < tryexcept(Body, X, St1), Sigma, Out > => < brk(Sigma1), Out2 >
-   if < Body, Sigma, Out > => < brk(Sigma1), Out2 > .
- crl < tryexcept(Body, X, St1), Sigma, Out > => < cnt(Sigma1), Out2 >
-   if < Body, Sigma, Out > => < cnt(Sigma1), Out2 > .
-  --- [c] Body raised -> bind exception to x, run handler in updated state.
- crl < tryexcept(Body, X, St1), Sigma, Out > => < Outc1, Out2 >
-   if < Body, Sigma, Out > => < raised(V), Out1 >
-   /\ < St1, Sigma[V / X], Out1 > => < Outc1, Out2 > .
-
-  --- Function-call boundary: an *uncaught* exception in the body
-  --- propagates out of the call, just like ret does [but as raised].
- crl < callExp(F, EL), Sigma, Out > => < raised(V), Out2 >
-   if < F, Sigma, Out > => < funcV(IL, Body, Cap), Out0 >
-   /\ evalArgs(EL, Sigma, Out0) => < VL, OutA >
-   /\ < Body, Sigma & Cap & buildFrame(IL, VL), OutA > => < raised(V), Out2 > .
-
-  --- callExp returns the exception value through the result; the
-  --- caller's seq / tryexcept catches it.  But callExp -> Value is the
-  --- expression layer; a raised exception in an expression context
-  --- needs to propagate up through expression evaluation.  The
-  --- expression `callExp[...]` rewrites to a Value; if the call raises,
-  --- there is no Value, so the call is "stuck" at the expression
-  --- level — the *parent statement* must therefore look for the
-  --- raised outcome from the call itself.  We surface this with a
-  --- second callStmt rule:
- crl < callStmt(F, EL), Sigma, Out > => < raised(V), Out2 >
-   if < F, Sigma, Out > => < funcV(IL, Body, Cap), Out0 >
-   /\ evalArgs(EL, Sigma, Out0) => < VL, OutA >
-   /\ < Body, Sigma & Cap & buildFrame(IL, VL), OutA > => < raised(V), Out2 > .
+  --- try { body } except as x { handler }   [cycle 13: one rule]
+  --- The body runs once.  Normal completion, ret, break and continue pass
+  --- through untouched; a raise binds the exception to x and runs the
+  --- handler in the State at the raise.
+  op tryK : Outcome Id Stmt Out -> Configuration .
+ crl < tryexcept(Body, X, St1), Sigma, Out > => < Outc, Out2 >
+   if < Body, Sigma, Out > => < Outd, Out1 >
+   /\ tryK(Outd, X, St1, Out1) => < Outc, Out2 > .
+  rl tryK(Sigma1, X, St1, Out1)      => < Sigma1, Out1 > .
+  rl tryK(ret(V), X, St1, Out1)      => < ret(V), Out1 > .
+  rl tryK(brk(Sigma1), X, St1, Out1) => < brk(Sigma1), Out1 > .
+  rl tryK(cnt(Sigma1), X, St1, Out1) => < cnt(Sigma1), Out1 > .
+ crl tryK(raised(V, Sigma1), X, St1, Out1) => < Outc, Out2 >
+   if < St1, Sigma1[V / X], Out1 > => < Outc, Out2 > .
 
   --- ----- tuples [cycle 8] ----------------------------------
   --- tupLit(...) — same eval as listLit but wraps in tupV instead of listV.
