@@ -129,6 +129,9 @@ def emit_expr(n: ast.AST) -> str:
             st = emit_expr(sl.step)  if sl.step  is not None else "noneE"
             return f"slice3({emit_expr(n.value)}, {lo}, {hi}, {st})"
         return f"({emit_expr(n.value)} ! {emit_expr(n.slice)})"
+    if isinstance(n, ast.IfExp):
+        # a if c else b  ->  ifExp(c, a, b)
+        return f"ifExp({emit_expr(n.test)}, {emit_expr(n.body)}, {emit_expr(n.orelse)})"
     if isinstance(n, ast.Lambda):
         if n.args.defaults or n.args.kwonlyargs or n.args.vararg or n.args.kwarg:
             raise SystemExit(UNSUPPORTED + "lambda with default / kw / var / kwarg")
@@ -186,10 +189,13 @@ def emit_stmt(n: ast.AST) -> str:
         if isinstance(n.target, ast.Name):
             tgt_expr = f"'{n.target.id}"
             return f"('{n.target.id} := ({tgt_expr} {op_sym} {emit_expr(n.value)}))"
-        if isinstance(n.target, ast.Subscript) and isinstance(n.target.value, ast.Name):
-            base = f"'{n.target.value.id}"
-            idx = emit_expr(n.target.slice)
-            return f"({base} [{idx}] := (({base} ! {idx}) {op_sym} {emit_expr(n.value)}))"
+        if isinstance(n.target, ast.Subscript) and isinstance(n.target.value, ast.Name) \
+                and not isinstance(n.target.slice, ast.Slice):
+            # cycle 18: x[i] op= e evaluates x and i once, then e; a list item changes in place
+            aop = {ast.Add: "aPlus", ast.Sub: "aMinus", ast.Mult: "aTimes",
+                   ast.FloorDiv: "aFdiv", ast.Mod: "aMod"}[type(n.op)]
+            return (f"augSub('{n.target.value.id}, {emit_expr(n.target.slice)}, "
+                    f"{emit_expr(n.value)}, {aop})")
         raise SystemExit(UNSUPPORTED + f"aug-assign target {type(n.target).__name__}")
     if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call):
         c = n.value
