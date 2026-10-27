@@ -795,7 +795,8 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    rl dk2(Vk, xraised(V, Sigma3), DE, Sigma2, Out2) => resD(xraised(V, Sigma3), Sigma3, Out2) .
   crl dk2(Vk, Vd, DE, Sigma2, Out2) => dk3(Vk, Vd, DO, Sigma3, Out3)
     if evalDEntries(DE, Sigma2, Out2) => resD(DO, Sigma3, Out3) .
-   rl dk3(Vk, Vd, D, Sigma3, Out3) => resD(consD(Vk, Vd, D), Sigma3, Out3) .
+  --- a duplicate key keeps the later entry (the rest D is the later entries) [cycle 15 QA]
+  crl dk3(Vk, Vd, D, Sigma3, Out3) => resD(if dictHas(D, Vk) then D else consD(Vk, Vd, D) fi, Sigma3, Out3) if true .
    rl dk3(Vk, Vd, xraised(V, Sigma4), Sigma3, Out3) => resD(xraised(V, Sigma4), Sigma4, Out3) .
 
  crl < dictLit(DE), Sigma, Out > => dlitK(DO, Sigma1, Out1)

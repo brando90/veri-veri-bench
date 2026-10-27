@@ -1,6 +1,6 @@
 {
-  "total": 56,
-  "pass":  56,
+  "total": 57,
+  "pass":  57,
   "fail":  0,
   "per_test": [
     {"name": "01_smoke", "status": "PASS", "reason": ""},
@@ -58,6 +58,7 @@
     {"name": "53_expression_call_writeback", "status": "PASS", "reason": ""},
     {"name": "54_dict_writeback", "status": "PASS", "reason": ""},
     {"name": "55_raise_in_literals", "status": "PASS", "reason": ""},
-    {"name": "56_scoping_writeback_mix", "status": "PASS", "reason": ""}
+    {"name": "56_scoping_writeback_mix", "status": "PASS", "reason": ""},
+    {"name": "57_dict_duplicate_keys", "status": "PASS", "reason": ""}
   ]
 }
