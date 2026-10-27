@@ -63,6 +63,9 @@ Per `../verification_spec.md`, the contract has three layers. This v1 implements
 ## Known limitations / TODOs
 
 - `pythonlite-syntax.maude` emits a few benign `bad format length` warnings on the `format (...)` operator attributes (lines 69, 70, 77, 79). These affect only Maude's pretty-printer; rules and rewriting are unaffected. Fix: trim the `format` attributes on `_:=_`, `print(_)`, `ifelse(_){_}else{_}`, `while(_){_}`.
+- Scoping is dynamic-plus-closure (cycle 14): a callee sees the caller's State, with closure variables overriding it only when the caller does not have them as locals. A helper that reads a global of the same name as a caller's local reads the caller's local; a closure called from a function that has a same-named local reads that local.
+- List mutation in a callee reaches the caller only for call statements (not calls in expression position), only for lists (not dicts), and not when two parameters alias one list or a parameter is mutated and then rebound.
+- A raise inside a list literal, tuple literal, slice, or function-position expression is still stuck; operators, `and` / `or` / `not` / `len`, assignment (single and tuple), `print`, `return`, `raise`, `append`, `xs[i] = v`, `if` / `while` conditions and call arguments propagate it.
 - Division-by-zero is silently stuck rather than producing `< error, σ, out >`. Add an error configuration in v2.
 - The output extractor (`extract_out.py`) assumes pythonlite's "one `|->` binding per variable" state shape and splits on the first top-level `,`. If a future v2 introduces grouped IMP-style `(x,y) |-> 0` declarations, the extractor must switch to a depth counter that ignores `|->`'s `>` glyph.
 - No formal proof of determinism yet. Add `crl` → `rl` reduction proof or Lean port + `unique` lemma.
