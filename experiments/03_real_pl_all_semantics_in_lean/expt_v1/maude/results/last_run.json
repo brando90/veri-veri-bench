@@ -1,6 +1,6 @@
 {
-  "total": 50,
-  "pass":  50,
+  "total": 57,
+  "pass":  57,
   "fail":  0,
   "per_test": [
     {"name": "01_smoke", "status": "PASS", "reason": ""},
@@ -52,6 +52,13 @@
     {"name": "47_alias_edge", "status": "PASS", "reason": ""},
     {"name": "48_raise_in_operands_deep", "status": "PASS", "reason": ""},
     {"name": "49_closure_list_no_clobber", "status": "PASS", "reason": ""},
-    {"name": "50_multiassign_raise", "status": "PASS", "reason": ""}
+    {"name": "50_multiassign_raise", "status": "PASS", "reason": ""},
+    {"name": "51_global_vs_caller_local", "status": "PASS", "reason": ""},
+    {"name": "52_closure_own_variable", "status": "PASS", "reason": ""},
+    {"name": "53_expression_call_writeback", "status": "PASS", "reason": ""},
+    {"name": "54_dict_writeback", "status": "PASS", "reason": ""},
+    {"name": "55_raise_in_literals", "status": "PASS", "reason": ""},
+    {"name": "56_scoping_writeback_mix", "status": "PASS", "reason": ""},
+    {"name": "57_dict_duplicate_keys", "status": "PASS", "reason": ""}
   ]
 }
