@@ -179,6 +179,10 @@ def emit_stmt(n: ast.AST) -> str:
         }.get(type(n.op))
         if op_sym is None:
             raise SystemExit(UNSUPPORTED + f"augmented op {type(n.op).__name__}")
+        if isinstance(n.target, ast.Name) and isinstance(n.op, (ast.Add, ast.Mult)):
+            # cycle 17: x += e / x *= e mutate a list in place (aliases see it)
+            aug = "augAdd" if isinstance(n.op, ast.Add) else "augMul"
+            return f"{aug}('{n.target.id}, {emit_expr(n.value)})"
         if isinstance(n.target, ast.Name):
             tgt_expr = f"'{n.target.id}"
             return f"('{n.target.id} := ({tgt_expr} {op_sym} {emit_expr(n.value)}))"

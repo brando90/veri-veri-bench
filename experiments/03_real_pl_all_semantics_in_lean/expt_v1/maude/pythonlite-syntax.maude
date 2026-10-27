@@ -83,6 +83,10 @@ mod PYTHONLITE-SYNTAX is including PYTHONLITE-VALUES + PYTHONLITE-STATE + PL-ID 
   op _.append(_) : Id Exp -> Stmt [prec 40] .
   --- xs[i] = v — list element assignment.
   op _[_]:=_     : Id Exp Exp -> Stmt [prec 40] .
+  --- Augmented add and multiply on a name [cycle 17]: a list is extended or repeated
+  --- IN PLACE so aliases see it; any other value gets the plain operator.
+  op augAdd      : Id Exp -> Stmt [prec 40] .
+  op augMul      : Id Exp -> Stmt [prec 40] .
 
   op ifelse(_){_}else{_} : Exp Stmt Stmt -> Stmt [prec 59] .
   op while(_){_}         : Exp Stmt -> Stmt       [prec 59] .
