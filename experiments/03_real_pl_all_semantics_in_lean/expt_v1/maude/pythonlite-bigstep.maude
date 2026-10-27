@@ -75,11 +75,21 @@ mod PYTHONLITE-FLOORDIV is including PL-INT .
   var A B : Int .
   op floorDiv : Int Int -> [Int] .
   op floorMod : Int Int -> [Int] .
+  --- Cycle 18: Maude's `/Int` only computes a quotient of two non-negative integers [the builtin
+  --- has no minus hook for the result], so a negative operand left `-7 /Int 2` unevaluated.
+  --- The quotient is taken of the absolute values and the sign and the floor are fixed after.
+  op absI : Int -> Int .
+  op quoNN : Int Int -> Int .
+ ceq absI(A) = A if A >=Int 0 .
+ ceq absI(A) = -Int A if 0 >Int A .
+  eq quoNN(A, B) = A /Int B .
  ceq floorDiv(A, B)
-   = if (((A <=Int 0) andBool (0 <=Int B)) orBool ((B <=Int 0) andBool (0 <=Int A)))
-        andBool ((A -Int ((A /Int B) *Int B)) =/=Bool 0)
-     then (A /Int B) -Int 1
-     else (A /Int B)
+   = if ((A >=Int 0) andBool (B >=Int 0)) orBool ((0 >Int A) andBool (0 >Int B))
+     then quoNN(absI(A), absI(B))
+     else if (absI(A) -Int (quoNN(absI(A), absI(B)) *Int absI(B))) ==Bool 0
+          then -Int quoNN(absI(A), absI(B))
+          else -Int (quoNN(absI(A), absI(B)) +Int 1)
+          fi
      fi
    if B =/=Bool 0 .
  ceq floorMod(A, B) = A -Int (floorDiv(A, B) *Int B) if B =/=Bool 0 .
@@ -100,7 +110,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   vars EO : ExpOut .  vars AO : ArgsOut .  vars LO : ListOut .  vars DO : DictOut .
   --- Cycle 16: heap semantics.  The State is ONE bag of bindings:
   ---   cell(A, X) |-> V   the variable X of activation A  [A = 0 is the global scope]
-  ---   hp(N)      |-> O   heap object N, a listV(..) or dictV(..); a variable that
+  ---   hpt         |-> the heap [cycle 18: a tree of objects, see below]; object N, a listV(..) or dictV(..); a variable that
   ---                      holds a list or dict holds ref(N), so aliasing is shared
   ---   par(A)     |-> P   the lexical parent of activation A: the activation its
   ---                      function was defined in [a function value carries it]
@@ -114,21 +124,57 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   op cell : Int Id -> Id [ctor] .
   op hp : Int -> Id [ctor] .
   op par : Int -> Id [ctor] .
-  ops cur nxtC fid : -> Id [ctor] .
+  ops cur nxtC fid hpt : -> Id [ctor] .
   op initS : -> State .
-  eq initS = (cur |-> 0) & (nxtC |-> 1) .
+  eq initS = (cur |-> 0) & (nxtC |-> 1) & (hpt |-> heapV(eh)) .
   vars A A1 P N : Int .  vars L L1 L2 : ListObj .  vars D : DictObj .
+  --- Cycle 18: the heap is NOT one binding per object any more.  Every hp(N) binding
+  --- sat in the same AC bag as the cells, so each lookup of a variable or object
+  --- scanned all heap objects and a program that built many lists got quadratic.  The
+  --- heap is now ONE binding, hpt |-> heapV(H), where H is a binary tree indexed by the
+  --- address [address N: 0 is the root, odd N = 2k+1 goes left to k, even N = 2k+2
+  --- goes right to k].  hget / hset are O(log N) and rebuild only one path, so the rest
+  --- of the tree is shared; the State bag keeps only the few live cells.
+  sort Heap .
+  op eh : -> Heap [ctor] .
+  op hnode : Value Heap Heap -> Heap [ctor] .
+  op heapV : Heap -> Value [ctor] .
+  op hgetH : Heap Int -> Value .
+  op hsetH : Heap Int Value -> Heap .
+  op hget : State Int -> Value .
+  op hset : State Int Value -> State .
+  vars Hh Hl Hr : Heap .  vars Vhp Whp : Value .  vars Nhp : Int .
+  eq hgetH(eh, Nhp) = none .
+  eq hgetH(hnode(Vhp, Hl, Hr), 0) = Vhp .
+ ceq hgetH(hnode(Vhp, Hl, Hr), Nhp) = hgetH(Hl, (Nhp -Int 1) /Int 2)
+   if Nhp >Int 0 /\ Nhp -Int ((Nhp /Int 2) *Int 2) ==Bool 1 .
+ ceq hgetH(hnode(Vhp, Hl, Hr), Nhp) = hgetH(Hr, (Nhp -Int 2) /Int 2)
+   if Nhp >Int 0 /\ Nhp -Int ((Nhp /Int 2) *Int 2) ==Bool 0 .
+  eq hsetH(eh, Nhp, Whp) = hsetH(hnode(none, eh, eh), Nhp, Whp) .
+  eq hsetH(hnode(Vhp, Hl, Hr), 0, Whp) = hnode(Whp, Hl, Hr) .
+ ceq hsetH(hnode(Vhp, Hl, Hr), Nhp, Whp) = hnode(Vhp, hsetH(Hl, (Nhp -Int 1) /Int 2, Whp), Hr)
+   if Nhp >Int 0 /\ Nhp -Int ((Nhp /Int 2) *Int 2) ==Bool 1 .
+ ceq hsetH(hnode(Vhp, Hl, Hr), Nhp, Whp) = hnode(Vhp, Hl, hsetH(Hr, (Nhp -Int 2) /Int 2, Whp))
+   if Nhp >Int 0 /\ Nhp -Int ((Nhp /Int 2) *Int 2) ==Bool 0 .
+ ceq hget(Sigma, Nhp) = hgetH(Hh, Nhp) if heapV(Hh) := Sigma(hpt) .
+ ceq hset(Sigma, Nhp, Whp) = Sigma[heapV(hsetH(Hh, Nhp, Whp)) / hpt] if heapV(Hh) := Sigma(hpt) .
   --- bound(Sigma, X): X has a binding in Sigma, possibly to `none` (cycle 13).
   op bound : State Id -> Bool .
   eq bound(Sigma & X |-> V, X) = true .
   eq bound(Sigma, X) = false [owise] .
   --- findAct(Sigma, A, X): the activation, from A up the parents, that has X; -1 if none
+  --- [a global that was never assigned]; -2 when an activation on the way has X as a
+  --- local that is still unassigned [cycle 18: a closure reading a variable its
+  --- enclosing function assigns only later, or the running function's own local].
   op findAct : State Int Id -> Int .
  ceq findAct(Sigma, A, X) = A if bound(Sigma, cell(A, X)) .
  ceq findAct(Sigma, A, X) = -Int 1
    if bound(Sigma, cell(A, X)) =/=Bool true /\ A ==Bool 0 .
+ ceq findAct(Sigma, A, X) = -Int 2
+   if bound(Sigma, cell(A, X)) =/=Bool true /\ A =/=Bool 0 /\ lcHas(Sigma, A, X) .
  ceq findAct(Sigma, A, X) = findAct(Sigma, P, X)
-   if bound(Sigma, cell(A, X)) =/=Bool true /\ A =/=Bool 0 /\ P := Sigma(par(A)) .
+   if bound(Sigma, cell(A, X)) =/=Bool true /\ A =/=Bool 0 /\ lcHas(Sigma, A, X) =/=Bool true
+   /\ P := Sigma(par(A)) .
   op actOf : State Id -> Int .
  ceq actOf(Sigma, X) = findAct(Sigma, A, X) if A := Sigma(cur) .
   --- look(Sigma, X): the value of variable X seen from the running activation
@@ -142,7 +188,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  ceq capOf(Sigma) = (cur |-> A) if A := Sigma(cur) .
   --- deref(Sigma, V): the heap object behind a ref, any other value unchanged
   op deref : State Value -> Value .
-  eq deref(Sigma, ref(N)) = Sigma(hp(N)) .
+  eq deref(Sigma, ref(N)) = hget(Sigma, N) .
   eq deref(Sigma, V) = V [owise] .
   --- deep(Sigma, V): V with every ref replaced by its object, all the way down.
   --- A ref met again on its own path [a self-containing list] is left as the ref,
@@ -161,7 +207,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   op deepD : State DictObj SeenL -> DictObj .
   eq deep(Sigma, V) = deepS(Sigma, V, nilS) .
  ceq deepS(Sigma, ref(N), Sn) = ref(N) if inS(N, Sn) .
- ceq deepS(Sigma, ref(N), Sn) = deepS(Sigma, Sigma(hp(N)), sc(N, Sn)) if notBool inS(N, Sn) .
+ ceq deepS(Sigma, ref(N), Sn) = deepS(Sigma, hget(Sigma, N), sc(N, Sn)) if notBool inS(N, Sn) .
   eq deepS(Sigma, listV(L), Sn) = listV(deepL(Sigma, L, Sn)) .
   eq deepS(Sigma, tupV(L), Sn) = tupV(deepL(Sigma, L, Sn)) .
   eq deepS(Sigma, dictV(D), Sn) = dictV(deepD(Sigma, D, Sn)) .
@@ -172,7 +218,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   eq deepD(Sigma, consD(V1, V2, D), Sn) = consD(deepS(Sigma, V1, Sn), deepS(Sigma, V2, Sn), deepD(Sigma, D, Sn)) .
   --- alloc(O, Sigma, Out): put the fresh list / dict object O on the heap, result its ref
   op alloc : Value State Out -> Configuration .
- crl alloc(V, Sigma, Out) => res(ref(N), (Sigma[(N +Int 1) / nxtC])[V / hp(N)], Out)
+ crl alloc(V, Sigma, Out) => res(ref(N), hset(Sigma[(N +Int 1) / nxtC], N, V), Out)
    if N := Sigma(nxtC) .
   vars E E1 E2 : Exp .
   vars St St1 St2 : Stmt .
@@ -185,7 +231,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   op idsV : IdList -> Value [ctor] .
   op locs : -> Id [ctor] .
   op lc : Int -> Id [ctor] .
-  vars EL : ExpList .
+  vars EL : ExpList .  var AOo : AugOp .
   vars Capa : State .  vars Xi Xj : Id .  vars ILi ILj : IdList .  vars Bi Bj : Stmt .  vars Ei Ej : Exp .
   op idCat : IdList IdList -> IdList .
   eq idCat(nilI, ILj) = ILj .
@@ -207,6 +253,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   eq locsOf(Xi [Ei] := Ej) = nilI .
   eq locsOf(augAdd(Xi, Ei)) = consI(Xi, nilI) .
   eq locsOf(augMul(Xi, Ei)) = consI(Xi, nilI) .
+  eq locsOf(augSub(Xi, Ei, Ej, AOo)) = nilI .
   eq locsOf(ifelse(Ei){ Bi }else{ Bj }) = idCat(locsOf(Bi), locsOf(Bj)) .
   eq locsOf(while(Ei){ Bi }) = locsOf(Bi) .
   eq locsOf(breakStmt) = nilI .
@@ -221,7 +268,15 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   --- mkLocs(params, body): the `locs` binding of a function value, none when every local is a parameter
   op mkLocs : IdList Stmt -> State .
   op locBind : IdList -> State .
-  eq mkLocs(ILi, Bi) = locBind(idMinus(locsOf(Bi), ILi)) .
+  --- cycle 18: `except ... as p` on a parameter p deletes it at the end of the handler, so p stays in
+  --- the locals [a later read raises like any unassigned local]
+  op hnOf : Stmt -> IdList .
+  eq hnOf(Bi ; Bj) = idCat(hnOf(Bi), hnOf(Bj)) .
+  eq hnOf(ifelse(Ei){ Bi }else{ Bj }) = idCat(hnOf(Bi), hnOf(Bj)) .
+  eq hnOf(while(Ei){ Bi }) = hnOf(Bi) .
+  eq hnOf(tryexcept(Bi, Xi, Bj)) = consI(Xi, idCat(hnOf(Bi), hnOf(Bj))) .
+  eq hnOf(Bi) = nilI [owise] .
+  eq mkLocs(ILi, Bi) = locBind(idMinus(locsOf(Bi), idMinus(ILi, hnOf(Bi)))) .
   eq locBind(nilI) = .State .
   eq locBind(consI(Xi, ILi)) = (locs |-> idsV(consI(Xi, ILi))) .
   --- addLc(Sigma, N, Cap): record the locals of the function being entered as activation N
@@ -234,6 +289,15 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    if A := Sigma(cur) /\ A =/=Bool 0 /\ bound(Sigma, lc(A)) /\ idsV(ILi) := Sigma(lc(A))
    /\ bound(Sigma, cell(A, X)) =/=Bool true .
   eq unb(Sigma, X) = false [owise] .
+  --- lcHas(Sigma, A, X): X is a local of activation A [cycle 18]
+  op lcHas : State Int Id -> Bool .
+ ceq lcHas(Sigma, A, X) = inIds(X, ILi) if bound(Sigma, lc(A)) /\ idsV(ILi) := Sigma(lc(A)) .
+  eq lcHas(Sigma, A, X) = false [owise] .
+  --- und(Sigma, X): X is not a local of the running function yet no activation or global has a
+  --- value for it, so reading it is a NameError [cycle 18]
+  op und : State Id -> Bool .
+ ceq und(Sigma, X) = true if 0 >Int actOf(Sigma, X) /\ unb(Sigma, X) =/=Bool true .
+  eq und(Sigma, X) = false [owise] .
 
   --- ----- expressions: literals -----
   --- Int / Bool / String literals are subsorted as Value already, so
@@ -243,6 +307,8 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   --- variable lookup
  crl < X,    Sigma, Out > => res(Sigma(cell(A, X)), Sigma, Out)
    if A := actOf(Sigma, X) /\ A >=Int 0 /\ unb(Sigma, X) =/=Bool true .
+ crl < X,    Sigma, Out > => res(xraised("NameError", Sigma), Sigma, Out)
+   if und(Sigma, X) .   --- cycle 18: a global never assigned, or a free variable not yet assigned
  crl < X,    Sigma, Out > => res(xraised("UnboundLocalError", Sigma), Sigma, Out)
    if unb(Sigma, X) .   --- a variable bound to None is a real binding (cycle 13)
 
@@ -364,6 +430,10 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    if I >=Int 0
    /\ I <Int lstLen(L) .
   --- [out-of-range indexing is currently stuck; cycle 7 will raise IndexError]
+  --- cycle 18: a negative index counts from the end [xs[-1]]
+ crl bin(oIdx, listV(L), I, Sigma, Out2) => res(lstIdx(L, I +Int lstLen(L)), Sigma, Out2)
+   if I <Int 0
+   /\ I +Int lstLen(L) >=Int 0 .
 
   --- ----- list `+` concat -------------------------------
  rl bin(oPlus, listV(L1), listV(L2), Sigma, Out2) => alloc(listV(lstConcat(L1, L2)), Sigma, Out2) .
@@ -456,8 +526,10 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  crl < X .append(E), Sigma, Out > => appK(EO, X, Sigma1, Out')
     if < E, Sigma, Out > => res(EO, Sigma1, Out') .
   op appK : ExpOut Id State Out -> Configuration .
- crl appK(V, X, Sigma1, Out') => < Sigma1[listV(lstAppend(L, V)) / hp(N)], Out' >
-   if unb(Sigma1, X) =/=Bool true /\ ref(N) := look(Sigma1, X) /\ listV(L) := Sigma1(hp(N)) .
+ crl appK(V, X, Sigma1, Out') => < hset(Sigma1, N, listV(lstAppend(L, V))), Out' >
+   if unb(Sigma1, X) =/=Bool true /\ ref(N) := look(Sigma1, X) /\ listV(L) := hget(Sigma1, N) .
+ crl appK(V, X, Sigma1, Out') => < raised("NameError", Sigma1), Out' >
+   if und(Sigma1, X) .
  crl appK(V, X, Sigma1, Out') => < raised("UnboundLocalError", Sigma1), Out' >
    if unb(Sigma1, X) .   --- cycle 17: xs is a local that has no value yet
   rl appK(xraised(V, Sigma2), X, Sigma1, Out') => < raised(V, Sigma2), Out' > .
@@ -474,13 +546,17 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
     if < E1, Sigma1, Out1 > => res(EO2, Sigma2, Out2) .
   rl ix2(V1, xraised(V, Sigma3), X, Sigma2, Out2) => < raised(V, Sigma3), Out2 > .
  crl ix2(V1, V2, X, Sigma2, Out2) => ix3(V1, V2, X, Sigma2, Out2)
-   if unb(Sigma2, X) =/=Bool true .
+   if unb(Sigma2, X) =/=Bool true /\ und(Sigma2, X) =/=Bool true .
+ crl ix2(V1, V2, X, Sigma2, Out2) => < raised("NameError", Sigma2), Out2 >
+   if und(Sigma2, X) .
  crl ix2(V1, V2, X, Sigma2, Out2) => < raised("UnboundLocalError", Sigma2), Out2 >
    if unb(Sigma2, X) .   --- cycle 17: the target is a local that has no value yet
- crl ix3(V1, I, X, Sigma2, Out2) => < Sigma2[listV(lstSet(L, I, V1)) / hp(N)], Out2 >
-   if ref(N) := look(Sigma2, X) /\ listV(L) := Sigma2(hp(N)) /\ I >=Int 0 /\ I <Int lstLen(L) .
- crl ix3(V1, Vk, X, Sigma2, Out2) => < Sigma2[dictV(dictSet(D, Vk, V1)) / hp(N)], Out2 >
-   if ref(N) := look(Sigma2, X) /\ dictV(D) := Sigma2(hp(N)) .
+ crl ix3(V1, I, X, Sigma2, Out2) => < hset(Sigma2, N, listV(lstSet(L, I, V1))), Out2 >
+   if ref(N) := look(Sigma2, X) /\ listV(L) := hget(Sigma2, N) /\ I >=Int 0 /\ I <Int lstLen(L) .
+ crl ix3(V1, I, X, Sigma2, Out2) => < hset(Sigma2, N, listV(lstSet(L, I +Int lstLen(L), V1))), Out2 >
+   if ref(N) := look(Sigma2, X) /\ listV(L) := hget(Sigma2, N) /\ I <Int 0 /\ I +Int lstLen(L) >=Int 0 .
+ crl ix3(V1, Vk, X, Sigma2, Out2) => < hset(Sigma2, N, dictV(dictSet(D, Vk, V1))), Out2 >
+   if ref(N) := look(Sigma2, X) /\ dictV(D) := hget(Sigma2, N) .
 
   --- x += e / x *= e [cycle 17].  x is read first, then e; a list is changed IN
   --- PLACE in its heap object [so every alias sees it] and x is rebound to the
@@ -488,11 +564,36 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   --- propagates.
   op augA : OpC Id ExpOut Exp State Out -> Configuration .
   op augB : OpC Id Value ExpOut State Out -> Configuration .
+  --- Cycle 18: list `+=` takes any iterable [list, tuple, string, dict keys] like
+  --- list.extend, and `*=` repeats; ipl says the in-place case applies, inplace does it.
   op ipl : OpC State Value Value -> Bool .
-  vars Ma Mb : Int .  vars La Lb : ListObj .
- ceq ipl(oPlus, Sigma, ref(Ma), ref(Mb)) = true if listV(La) := Sigma(hp(Ma)) /\ listV(Lb) := Sigma(hp(Mb)) .
- ceq ipl(oTimes, Sigma, ref(Ma), I) = true if listV(La) := Sigma(hp(Ma)) .
+  op inplace : OpC State Value Value -> State .
+  op isIt : State Value -> Bool .
+  op elts : State Value -> ListObj .
+  op chars : String -> ListObj .
+  op charsFrom : String Int Int -> ListObj .
+  op dictKeys : DictObj -> ListObj .
+  vars Ma Mb : Int .  vars La Lb : ListObj .  var Sx : String .  var Ix Nx : Int .
+ ceq isIt(Sigma, ref(Ma)) = true if listV(La) := hget(Sigma, Ma) .
+ ceq isIt(Sigma, ref(Ma)) = true if dictV(D) := hget(Sigma, Ma) .
+  eq isIt(Sigma, tupV(La)) = true .
+  eq isIt(Sigma, Sx) = true .
+  eq isIt(Sigma, V) = false [owise] .
+ ceq elts(Sigma, ref(Ma)) = La if listV(La) := hget(Sigma, Ma) .
+ ceq elts(Sigma, ref(Ma)) = dictKeys(D) if dictV(D) := hget(Sigma, Ma) .
+  eq elts(Sigma, tupV(La)) = La .
+  eq elts(Sigma, Sx) = charsFrom(Sx, 0, length(Sx)) .
+ ceq charsFrom(Sx, Ix, Nx) = nil if Ix >=Int Nx .
+ ceq charsFrom(Sx, Ix, Nx) = cons(substr(Sx, Ix, 1), charsFrom(Sx, Ix +Int 1, Nx)) if Nx >Int Ix .
+  eq dictKeys(nilD) = nil .
+  eq dictKeys(consD(V1, V2, D)) = cons(V1, dictKeys(D)) .
+ ceq ipl(oPlus, Sigma, ref(Ma), V2) = true if listV(La) := hget(Sigma, Ma) /\ isIt(Sigma, V2) .
+ ceq ipl(oTimes, Sigma, ref(Ma), I) = true if listV(La) := hget(Sigma, Ma) .
   eq ipl(OP, Sigma, V1, V2) = false [owise] .
+ ceq inplace(oPlus, Sigma, ref(Ma), V2) = hset(Sigma, Ma, listV(lstConcat(La, elts(Sigma, V2))))
+   if listV(La) := hget(Sigma, Ma) .
+ ceq inplace(oTimes, Sigma, ref(Ma), I) = hset(Sigma, Ma, listV(lstRep(La, I)))
+   if listV(La) := hget(Sigma, Ma) .
  crl < augAdd(X, E), Sigma, Out > => augA(oPlus, X, EO, E, Sigma1, Out1)
    if < X, Sigma, Out > => res(EO, Sigma1, Out1) .
  crl < augMul(X, E), Sigma, Out > => augA(oTimes, X, EO, E, Sigma1, Out1)
@@ -501,15 +602,45 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  crl augA(OP, X, V1, E, Sigma1, Out1) => augB(OP, X, V1, EO, Sigma2, Out2)
    if < E, Sigma1, Out1 > => res(EO, Sigma2, Out2) .
   rl augB(OP, X, V1, xraised(V, Sigma3), Sigma2, Out2) => < raised(V, Sigma3), Out2 > .
- crl augB(oPlus, X, ref(Ma), ref(Mb), Sigma2, Out2)
-   => < asgn(Sigma2[listV(lstConcat(La, Lb)) / hp(Ma)], X, ref(Ma)), Out2 >
-   if listV(La) := Sigma2(hp(Ma)) /\ listV(Lb) := Sigma2(hp(Mb)) .
- crl augB(oTimes, X, ref(Ma), I, Sigma2, Out2)
-   => < asgn(Sigma2[listV(lstRep(La, I)) / hp(Ma)], X, ref(Ma)), Out2 >
-   if listV(La) := Sigma2(hp(Ma)) .
+ crl augB(OP, X, V1, V2, Sigma2, Out2)
+   => < asgn(inplace(OP, Sigma2, V1, V2), X, V1), Out2 >
+   if ipl(OP, Sigma2, V1, V2) .
  crl augB(OP, X, V1, V2, Sigma2, Out2) => asgK(EO, X, Sigma3, Out3)
    if ipl(OP, Sigma2, V1, V2) =/=Bool true
    /\ b2(OP, V1, V2, Sigma2, Out2) => res(EO, Sigma3, Out3) .
+
+  --- x[i] op= e [cycle 18].  x, then i, then the old item, then e, in that order as in
+  --- CPython; a list item is extended / repeated IN PLACE [so aliases of the inner list see
+  --- it], any other item gets the plain operator and is stored back at x[i].
+  op toOp : AugOp -> OpC .
+  eq toOp(aPlus) = oPlus .  eq toOp(aMinus) = oMinus .  eq toOp(aTimes) = oTimes .
+  eq toOp(aFdiv) = oFdiv .  eq toOp(aMod) = oMod .
+  op sa1 : AugOp ExpOut Exp Exp State Out -> Configuration .
+  op sa2 : AugOp Value ExpOut Exp State Out -> Configuration .
+  op sa3 : AugOp Value Value Value ExpOut State Out -> Configuration .
+  op sa4 : Value Value ExpOut State Out -> Configuration .
+ crl < augSub(X, E1, E2, AOo), Sigma, Out > => sa1(AOo, EO, E1, E2, Sigma1, Out1)
+   if < X, Sigma, Out > => res(EO, Sigma1, Out1) .
+  rl sa1(AOo, xraised(V, Sigma2), E1, E2, Sigma1, Out1) => < raised(V, Sigma2), Out1 > .
+ crl sa1(AOo, V1, E1, E2, Sigma1, Out1) => sa2(AOo, V1, EO, E2, Sigma2, Out2)
+   if < E1, Sigma1, Out1 > => res(EO, Sigma2, Out2) .
+  rl sa2(AOo, V1, xraised(V, Sigma3), E2, Sigma2, Out2) => < raised(V, Sigma3), Out2 > .
+ crl sa2(AOo, V1, V2, E2, Sigma2, Out2) => sa3(AOo, V1, V2, Vrp, EO, Sigma3, Out3)
+   if b2(oIdx, V1, V2, Sigma2, Out2) => res(Vrp, Sigma2, Out2)
+   /\ < E2, Sigma2, Out2 > => res(EO, Sigma3, Out3) .
+  rl sa3(AOo, V1, V2, Vrp, xraised(V, Sigma4), Sigma3, Out3) => < raised(V, Sigma4), Out3 > .
+ crl sa3(AOo, V1, V2, Vrp, V, Sigma3, Out3) => sa4(V1, V2, Vrp, inplace(toOp(AOo), Sigma3, Vrp, V), Out3)
+   if ipl(toOp(AOo), Sigma3, Vrp, V) .   --- CPython stores the result back [x[i] = x[i].__iadd__(e)] even when the list was changed in place
+ crl sa3(AOo, V1, V2, Vrp, V, Sigma3, Out3) => sa4(V1, V2, EO, Sigma4, Out4)
+   if ipl(toOp(AOo), Sigma3, Vrp, V) =/=Bool true
+   /\ b2(toOp(AOo), Vrp, V, Sigma3, Out3) => res(EO, Sigma4, Out4) .
+  rl sa4(V1, V2, xraised(V, Sigma5), Sigma4, Out4) => < raised(V, Sigma5), Out4 > .
+ crl sa4(ref(N), I, V, Sigma4, Out4) => < hset(Sigma4, N, listV(lstSet(L, I, V))), Out4 >
+   if listV(L) := hget(Sigma4, N) /\ I >=Int 0 /\ I <Int lstLen(L) .
+ crl sa4(ref(N), I, V, Sigma4, Out4) => < hset(Sigma4, N, listV(lstSet(L, I +Int lstLen(L), V))), Out4 >
+   if listV(L) := hget(Sigma4, N) /\ I <Int 0 /\ I +Int lstLen(L) >=Int 0 .
+ crl sa4(ref(N), Vk, V, Sigma4, Out4) => < hset(Sigma4, N, dictV(dictSet(D, Vk, V))), Out4 >
+   if dictV(D) := hget(Sigma4, N) .
 
   op lstSet : ListObj Int Value -> ListObj .
   vars Vh Vha : Value .  vars Lh : ListObj .
@@ -702,7 +833,20 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   rl tryK(ret(V, SigmaR), X, St1, Out1) => < ret(V, SigmaR), Out1 > .
   rl tryK(brk(Sigma1), X, St1, Out1) => < brk(Sigma1), Out1 > .
   rl tryK(cnt(Sigma1), X, St1, Out1) => < cnt(Sigma1), Out1 > .
-  rl tryK(raised(V, Sigma1), X, St1, Out1) => < St1, asgn(Sigma1, X, V), Out1 > .
+  --- Cycle 18: like CPython, `except ... as x` deletes x when the handler ends [also when
+  --- the handler returns, raises, breaks or continues], so a later read of x raises
+  --- UnboundLocalError in a function and NameError at the top level.
+ crl tryK(raised(V, Sigma1), X, St1, Out1) => hdlK(Outd, X, Out2)
+    if < St1, asgn(Sigma1, X, V), Out1 > => < Outd, Out2 > .
+  op hdlK : Outcome Id Out -> Configuration .
+  op delv : State Id -> State .
+  rl hdlK(Sigma1, X, Out1)            => < delv(Sigma1, X), Out1 > .
+  rl hdlK(ret(V, SigmaR), X, Out1)    => < ret(V, delv(SigmaR, X)), Out1 > .
+  rl hdlK(raised(V, Sigma1), X, Out1) => < raised(V, delv(Sigma1, X)), Out1 > .
+  rl hdlK(brk(Sigma1), X, Out1)       => < brk(delv(Sigma1, X)), Out1 > .
+  rl hdlK(cnt(Sigma1), X, Out1)       => < cnt(delv(Sigma1, X)), Out1 > .
+ ceq delv(Sigma, X) = Sd if A := Sigma(cur) /\ (cell(A, X) |-> Vd2 & Sd) := Sigma .
+  eq delv(Sigma, X) = Sigma [owise] .
 
   --- ----- tuples [cycle 8] ----------------------------------
   --- tupLit(...) - same eval as listLit but wraps in tupV instead of listV.
@@ -711,6 +855,15 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    if evalElts(EL, nil, Sigma, Out) => resL(LO, Sigma1, Out1) .
   rl tupK(L, Sigma1, Out1) => res(tupV(L), Sigma1, Out1) .
   rl tupK(xraised(V, Sigma2), Sigma1, Out1) => res(xraised(V, Sigma2), Sigma2, Out1) .
+
+  --- Cycle 18: tuple `+` and `*` build a new tuple [tuples are immutable, so `t += u` and
+  --- `t *= n` rebind t].
+ rl bin(oPlus, tupV(L1), tupV(L2), Sigma, Out2) => res(tupV(lstConcat(L1, L2)), Sigma, Out2) .
+ rl bin(oTimes, tupV(L1), I2, Sigma, Out2) => res(tupV(lstRep(L1, I2)), Sigma, Out2) .
+ rl bin(oTimes, I1, tupV(L2), Sigma, Out2) => res(tupV(lstRep(L2, I1)), Sigma, Out2) .
+ crl bin(oIdx, tupV(L), I, Sigma, Out2) => res(lstIdx(L, I +Int lstLen(L)), Sigma, Out2)
+   if I <Int 0
+   /\ I +Int lstLen(L) >=Int 0 .
 
   --- len(t) for tuples [shares lstLen with lists].
  rl un(oLen, tupV(L), Sigma, Out') => res(lstLen(L), Sigma, Out') .
@@ -734,7 +887,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   op maK : ExpOut IdList State Out -> Configuration .
   rl maK(tupV(L), IL, Sigma1, Out')  => < spreadAssign(Sigma1, IL, L), Out' > .
   crl maK(ref(N), IL, Sigma1, Out') => < spreadAssign(Sigma1, IL, L), Out' >
-    if listV(L) := Sigma1(hp(N)) .
+    if listV(L) := hget(Sigma1, N) .
   rl maK(xraised(V, Sigma2), IL, Sigma1, Out') => < raised(V, Sigma2), Out' > .
 
   --- ----- lambda [cycle 10] --------------------------------
@@ -742,6 +895,17 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   --- where cap names the defining activation and a fresh function identity.
  crl < lambdaExp(IL, E), Sigma, Out > => res(funcV(IL, return(E), capOf(Sigma) & (fid |-> N)), mark(Sigma[(N +Int 1) / nxtC]), Out)
    if N := Sigma(nxtC) .
+
+  --- Conditional expression  a if c else b  [cycle 18]: c is evaluated once, then only the
+  --- chosen branch; a raise in c propagates.
+  op ifeK : ExpOut Exp Exp State Out -> Configuration .
+ crl < ifExp(E, E1, E2), Sigma, Out > => ifeK(EO, E1, E2, Sigma1, Out1)
+    if < E, Sigma, Out > => res(EO, Sigma1, Out1) .
+ crl ifeK(V, E1, E2, Sigma1, Out1) => < E1, Sigma1, Out1 >
+    if truthy(deref(Sigma1, V)) ==Bool true .
+ crl ifeK(V, E1, E2, Sigma1, Out1) => < E2, Sigma1, Out1 >
+    if truthy(deref(Sigma1, V)) ==Bool false .
+  rl ifeK(xraised(V, Sigma2), E1, E2, Sigma1, Out1) => res(xraised(V, Sigma2), Sigma2, Out1) .
 
   --- None literal evaluates to the none value.
  rl < noneE, Sigma, Out > => res(none, Sigma, Out) .

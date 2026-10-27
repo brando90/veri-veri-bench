@@ -1,0 +1,33 @@
+# tuples: + and * build a new tuple, += and *= rebind
+t = (1, 2)
+u = t + (3, 4)
+print(len(t))
+print(len(u))
+print(u[3])
+t += (5,)
+print(len(t))
+print(t[2])
+r = (7, 8)
+r *= 3
+print(len(r))
+print(r[4])
+w = 2 * (1, 2, 3)
+print(len(w))
+print(w[5])
+z = (1,) * 0
+print(len(z))
+e = () + (9,)
+print(e[0])
+pair = (1, 2)
+same = pair
+pair += (3,)
+print(len(same))
+print(len(pair))
+print(pair == (1, 2, 3))
+print((1, 2) + (3,) == (1, 2, 3))
+shared = [1]
+k = (shared, 2)
+k2 = k + (3,)
+shared.append(5)
+print(len(k2[0]))
+print(k2[-1])

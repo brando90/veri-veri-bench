@@ -87,6 +87,11 @@ mod PYTHONLITE-SYNTAX is including PYTHONLITE-VALUES + PYTHONLITE-STATE + PL-ID 
   --- IN PLACE so aliases see it; any other value gets the plain operator.
   op augAdd      : Id Exp -> Stmt [prec 40] .
   op augMul      : Id Exp -> Stmt [prec 40] .
+  --- Augmented assignment on a subscript target [cycle 18]: augSub(x, i, e, op) is
+  --- x[i] op= e.  x and i are evaluated once, then e; a list value is changed in place.
+  sort AugOp .
+  ops aPlus aMinus aTimes aFdiv aMod : -> AugOp [ctor] .
+  op augSub      : Id Exp Exp AugOp -> Stmt .
 
   op ifelse(_){_}else{_} : Exp Stmt Stmt -> Stmt [prec 59] .
   op while(_){_}         : Exp Stmt -> Stmt       [prec 59] .
@@ -168,6 +173,9 @@ mod PYTHONLITE-SYNTAX is including PYTHONLITE-VALUES + PYTHONLITE-STATE + PL-ID 
   --- is deliberately not subsorted under Exp (see the note at the top), so
   --- slice3(xs, none, 2, none) and `x = None` were ill-sorted before this.
   op noneE : -> Exp .
+
+  --- Conditional expression  a if c else b  [cycle 18]: ifExp(c, a, b).
+  op ifExp : Exp Exp Exp -> Exp .
 
   --- Top-level program is just a Stmt.
   sort Pgm .
