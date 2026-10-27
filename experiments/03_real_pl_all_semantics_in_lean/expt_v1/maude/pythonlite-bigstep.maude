@@ -9,6 +9,18 @@
 ---   < Stmt, Sigma, Out >  =>  < Outcome, Out' >           statement evaluation
 ---   < Pgm                >  =>  < Sigma,  Out  >          whole-program kickoff
 ---
+--- CYCLE 18, CONTINUATION-PASSING FORM.  This file is generated from the direct-style semantics
+--- [results/cycle18_cps/pythonlite-bigstep-direct.maude] by results/cycle18_cps/cps_convert.py;
+--- the two define the same relation and every test passes on both.  Read the direct-style file for
+--- the rules as a big-step spec; this one is the fast evaluator.  Here each configuration carries a
+--- continuation K: `< E, Sigma, Out | K >` evaluates E and hands the result to the frame on top of K
+--- [`res(EO, Sigma', Out', kFrame(.., K))` pops it], so every rule is plain [no `=>` condition] and a
+--- step costs the same however big the heap is.  The judgments below read
+---
+---   < Exp,  Sigma, Out | K >  =>*  res(ExpOut, Sigma', Out', K')   expression evaluation
+---   < Stmt, Sigma, Out | K >  =>*  < Outcome, Out' | K' >          statement evaluation
+---   < Pgm >                   =>*  < Outcome, Out >                whole program
+---
 --- Cycle 15: an expression now returns the State it finished in, so a call in
 --- expression position can write the callee's list / dict mutations back to
 --- the caller [res(EO, Sigma', Out')].  The Value sort subsumes Int, Bool,
@@ -51,20 +63,21 @@ mod PYTHONLITE-CONFIGURATIONS-BIGSTEP is
   op brk    : State -> Outcome [ctor] .   --- break out of the nearest loop
   op cnt    : State -> Outcome [ctor] .   --- continue with the next iteration
 
+  --- Cycle 18 [CPS]: a configuration carries a continuation K [sort Kont]: the frames still to run once
+  --- this one finishes.  Every rule is plain, so a step costs the same however large the heap is
+  --- [a rewrite condition `=>` costs the size of the term it is given].
+  sort Kont .
+  op halt : -> Kont [ctor] .
   sort Configuration .
-  --- expression configurations [Value-result]
-  op <_,_,_> : Exp State Out -> Configuration .
-  --- statement configurations
-  op <_,_,_> : Stmt State Out -> Configuration .
-  --- Result brackets [cycle 15]: an expression finishes with an ExpOut, the
-  --- State it ended in and the Out; a call's argument list with an ArgsOut, a
-  --- literal's elements with a ListOut / DictOut; a statement with an Outcome.
-  op res  : ExpOut State Out -> Configuration [ctor] .
-  op resA : ArgsOut State Out -> Configuration [ctor] .
-  op resL : ListOut State Out -> Configuration [ctor] .
-  op resD : DictOut State Out -> Configuration [ctor] .
+  op <_,_,_|_> : Exp State Out Kont -> Configuration .
+  op <_,_,_|_> : Stmt State Out Kont -> Configuration .
+  op res  : ExpOut State Out Kont -> Configuration [ctor] .
+  op resA : ArgsOut State Out Kont -> Configuration [ctor] .
+  op resL : ListOut State Out Kont -> Configuration [ctor] .
+  op resD : DictOut State Out Kont -> Configuration [ctor] .
+  op <_,_|_> : Outcome Out Kont -> Configuration [ctor] .
+  --- the final configuration of a whole program
   op <_,_>   : Outcome Out -> Configuration [ctor] .
-  --- whole-program [starts from empty state + empty output]
   op <_>     : Pgm -> Configuration .
 endm
 
@@ -99,6 +112,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   including PYTHONLITE-CONFIGURATIONS-BIGSTEP + PYTHONLITE-FLOORDIV .
 
   vars X : Id .
+  var K : Kont .
   vars Sigma Sigma' Sigma1 Sigma2 Sigma3 Sigma4 : State .
   vars Out Out1 Out2 Out3 Out4 Out' : Out .
   vars I I1 I2 Ih Nh : Int .       --- only match integer values
@@ -217,9 +231,8 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   eq deepD(Sigma, nilD, Sn) = nilD .
   eq deepD(Sigma, consD(V1, V2, D), Sn) = consD(deepS(Sigma, V1, Sn), deepS(Sigma, V2, Sn), deepD(Sigma, D, Sn)) .
   --- alloc(O, Sigma, Out): put the fresh list / dict object O on the heap, result its ref
-  op alloc : Value State Out -> Configuration .
- crl alloc(V, Sigma, Out) => res(ref(N), hset(Sigma[(N +Int 1) / nxtC], N, V), Out)
-   if N := Sigma(nxtC) .
+  op alloc : Value State Out Kont -> Configuration .
+ crl alloc(V, Sigma, Out, K) => res(ref(N), hset(Sigma[(N +Int 1) / nxtC], N, V), Out, K) if N := Sigma(nxtC) .
   vars E E1 E2 : Exp .
   vars St St1 St2 : Stmt .
 
@@ -299,18 +312,82 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  ceq und(Sigma, X) = true if 0 >Int actOf(Sigma, X) /\ unb(Sigma, X) =/=Bool true .
   eq und(Sigma, X) = false [owise] .
 
+  --- Continuation frames [CPS, cycle 18].  Every rule below is plain: a construct pushes a frame
+  --- and evaluates its sub-term; the result config pops it.  The cost of a step no longer depends
+  --- on how much heap the State holds.
+  op kB1 : Exp Kont -> Kont [ctor] .
+  op kB1x2 : Exp Kont -> Kont [ctor] .
+  op kB1x3 : Exp Kont -> Kont [ctor] .
+  op kB1x4 : Exp Kont -> Kont [ctor] .
+  op kB1x5 : Exp Kont -> Kont [ctor] .
+  op kB1x6 : Exp Kont -> Kont [ctor] .
+  op kB1x7 : Exp Kont -> Kont [ctor] .
+  op kB1x8 : Exp Kont -> Kont [ctor] .
+  op kB1x9 : Exp Kont -> Kont [ctor] .
+  op kB1x10 : Exp Kont -> Kont [ctor] .
+  op kB1x11 : Exp Kont -> Kont [ctor] .
+  op kB1x12 : Exp Kont -> Kont [ctor] .
+  op kB1x13 : Exp Kont -> Kont [ctor] .
+  op kB2 : OpC Value Kont -> Kont [ctor] .
+  op kU1 : Kont -> Kont [ctor] .
+  op kU1x2 : Kont -> Kont [ctor] .
+  op kU1x3 : Kont -> Kont [ctor] .
+  op kEltsK : ExpList ListObj Kont -> Kont [ctor] .
+  op kLitK : Kont -> Kont [ctor] .
+  op kAndK : Exp Kont -> Kont [ctor] .
+  op kOrK : Exp Kont -> Kont [ctor] .
+  op kAsgK : Id Kont -> Kont [ctor] .
+  op kPrintK : Kont -> Kont [ctor] .
+  op kAppK : Id Kont -> Kont [ctor] .
+  op kIx1 : Id Exp Kont -> Kont [ctor] .
+  op kIx2 : Value Id Kont -> Kont [ctor] .
+  op kAugA : Id Exp Kont -> Kont [ctor] .
+  op kAugAx2 : Id Exp Kont -> Kont [ctor] .
+  op kAugB : OpC Id Value Kont -> Kont [ctor] .
+  op kAsgKx2 : Id Kont -> Kont [ctor] .
+  op kSa1 : Exp Exp AugOp Kont -> Kont [ctor] .
+  op kSa2 : AugOp Value Exp Kont -> Kont [ctor] .
+  op kSa2b : AugOp Value Value Exp Kont -> Kont [ctor] .
+  op kSa3 : AugOp Value Value Value Kont -> Kont [ctor] .
+  op kSa4 : Value Value Kont -> Kont [ctor] .
+  op kSeqK : Stmt Kont -> Kont [ctor] .
+  op kIfK : Stmt Stmt Kont -> Kont [ctor] .
+  op kWhileC : Exp Stmt Kont -> Kont [ctor] .
+  op kWhileB : Exp Stmt Kont -> Kont [ctor] .
+  op kRetK : Kont -> Kont [ctor] .
+  op kArgsK : ExpList ValueList Kont -> Kont [ctor] .
+  op kCallF : ExpList Kont -> Kont [ctor] .
+  op kCallExpGo : IdList Stmt State ExpList Kont -> Kont [ctor] .
+  op kCallRes : Int Kont -> Kont [ctor] .
+  op kCallStmtF : ExpList Kont -> Kont [ctor] .
+  op kCallStmtGo : IdList Stmt State ExpList Kont -> Kont [ctor] .
+  op kCallStmtRes : Int Kont -> Kont [ctor] .
+  op kRaiseK : Kont -> Kont [ctor] .
+  op kTryK : Id Stmt Kont -> Kont [ctor] .
+  op kHdlK : Id Kont -> Kont [ctor] .
+  op kTupK : Kont -> Kont [ctor] .
+  op kMaK : IdList Kont -> Kont [ctor] .
+  op kIfeK : Exp Exp Kont -> Kont [ctor] .
+  op kSl1 : Exp Exp Exp Kont -> Kont [ctor] .
+  op kSl2 : Value Exp Exp Kont -> Kont [ctor] .
+  op kSl3 : Value Value Exp Kont -> Kont [ctor] .
+  op kSl4 : Value Value Value Kont -> Kont [ctor] .
+  op kDk1 : Exp DictEntries Kont -> Kont [ctor] .
+  op kDk2 : Value DictEntries Kont -> Kont [ctor] .
+  op kDk3 : Value Value Kont -> Kont [ctor] .
+  op kDlitK : Kont -> Kont [ctor] .
+
   --- ----- expressions: literals -----
   --- Int / Bool / String literals are subsorted as Value already, so
   --- a single rule covers all three [the variable is typed Value].
-  rl < V, Sigma, Out > => res(V, Sigma, Out) .
+ rl < V, Sigma, Out | K > => res(V, Sigma, Out, K) .
 
   --- variable lookup
- crl < X,    Sigma, Out > => res(Sigma(cell(A, X)), Sigma, Out)
-   if A := actOf(Sigma, X) /\ A >=Int 0 /\ unb(Sigma, X) =/=Bool true .
- crl < X,    Sigma, Out > => res(xraised("NameError", Sigma), Sigma, Out)
-   if und(Sigma, X) .   --- cycle 18: a global never assigned, or a free variable not yet assigned
- crl < X,    Sigma, Out > => res(xraised("UnboundLocalError", Sigma), Sigma, Out)
-   if unb(Sigma, X) .   --- a variable bound to None is a real binding (cycle 13)
+ crl < X, Sigma, Out | K > => res(Sigma(cell(A, X)), Sigma, Out, K) if A := actOf(Sigma, X) /\ A >=Int 0 /\ unb(Sigma, X) =/=Bool true .
+  --- cycle 18: a global never assigned, or a free variable not yet assigned
+ crl < X, Sigma, Out | K > => res(xraised("NameError", Sigma), Sigma, Out, K) if und(Sigma, X) .
+  --- a variable bound to None is a real binding (cycle 13)
+ crl < X, Sigma, Out | K > => res(xraised("UnboundLocalError", Sigma), Sigma, Out, K) if unb(Sigma, X) .
 
   --- ----- operators: evaluate each operand ONCE, then dispatch [cycle 14] -----
   --- Each binary operator is ONE rule that evaluates E1, then E2, then hands
@@ -320,40 +397,40 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   sort OpC .
   ops oPlus oMinus oTimes oFdiv oMod oLt oLe oGt oGe oEq oNe oIn oIdx oLen oNot oNeg : -> OpC [ctor] .
   vars OP : OpC .  vars EO1 EO2 : ExpOut .
-  op bin : OpC Value Value State Out -> Configuration .
-  op b1 : OpC ExpOut Exp State Out -> Configuration .
-  op b2 : OpC Value ExpOut State Out -> Configuration .
-  op un : OpC Value State Out -> Configuration .
-  op u1 : OpC ExpOut State Out -> Configuration .
- crl < E1 + E2, Sigma, Out > => b1(oPlus, EO1, E2, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
- crl < E1 - E2, Sigma, Out > => b1(oMinus, EO1, E2, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
- crl < E1 * E2, Sigma, Out > => b1(oTimes, EO1, E2, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
- crl < E1 // E2, Sigma, Out > => b1(oFdiv, EO1, E2, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
- crl < E1 % E2, Sigma, Out > => b1(oMod, EO1, E2, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
- crl < E1 < E2, Sigma, Out > => b1(oLt, EO1, E2, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
- crl < E1 <= E2, Sigma, Out > => b1(oLe, EO1, E2, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
- crl < E1 > E2, Sigma, Out > => b1(oGt, EO1, E2, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
- crl < E1 >= E2, Sigma, Out > => b1(oGe, EO1, E2, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
- crl < E1 eqq E2, Sigma, Out > => b1(oEq, EO1, E2, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
- crl < E1 neq E2, Sigma, Out > => b1(oNe, EO1, E2, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
- crl < E1 in E2, Sigma, Out > => b1(oIn, EO1, E2, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
- crl < E1 ! E2, Sigma, Out > => b1(oIdx, EO1, E2, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
-  crl b1(OP, V1, E2, Sigma1, Out1) => b2(OP, V1, EO2, Sigma2, Out2)
-     if < E2, Sigma1, Out1 > => res(EO2, Sigma2, Out2) .
-  rl b1(OP, xraised(V, Sigma2), E2, Sigma1, Out1) => res(xraised(V, Sigma2), Sigma2, Out1) .
+  op bin : OpC Value Value State Out Kont -> Configuration .
+  op b1 : OpC ExpOut Exp State Out Kont -> Configuration .
+  op b2 : OpC Value ExpOut State Out Kont -> Configuration .
+  op un : OpC Value State Out Kont -> Configuration .
+  op u1 : OpC ExpOut State Out Kont -> Configuration .
+ rl < E1 + E2, Sigma, Out | K > => < E1, Sigma, Out | kB1(E2, K) > .
+ rl res(EO1, Sigma1, Out1, kB1(E2, K)) => b1(oPlus, EO1, E2, Sigma1, Out1, K) .
+ rl < E1 - E2, Sigma, Out | K > => < E1, Sigma, Out | kB1x2(E2, K) > .
+ rl res(EO1, Sigma1, Out1, kB1x2(E2, K)) => b1(oMinus, EO1, E2, Sigma1, Out1, K) .
+ rl < E1 * E2, Sigma, Out | K > => < E1, Sigma, Out | kB1x3(E2, K) > .
+ rl res(EO1, Sigma1, Out1, kB1x3(E2, K)) => b1(oTimes, EO1, E2, Sigma1, Out1, K) .
+ rl < E1 // E2, Sigma, Out | K > => < E1, Sigma, Out | kB1x4(E2, K) > .
+ rl res(EO1, Sigma1, Out1, kB1x4(E2, K)) => b1(oFdiv, EO1, E2, Sigma1, Out1, K) .
+ rl < E1 % E2, Sigma, Out | K > => < E1, Sigma, Out | kB1x5(E2, K) > .
+ rl res(EO1, Sigma1, Out1, kB1x5(E2, K)) => b1(oMod, EO1, E2, Sigma1, Out1, K) .
+ rl < E1 < E2, Sigma, Out | K > => < E1, Sigma, Out | kB1x6(E2, K) > .
+ rl res(EO1, Sigma1, Out1, kB1x6(E2, K)) => b1(oLt, EO1, E2, Sigma1, Out1, K) .
+ rl < E1 <= E2, Sigma, Out | K > => < E1, Sigma, Out | kB1x7(E2, K) > .
+ rl res(EO1, Sigma1, Out1, kB1x7(E2, K)) => b1(oLe, EO1, E2, Sigma1, Out1, K) .
+ rl < E1 > E2, Sigma, Out | K > => < E1, Sigma, Out | kB1x8(E2, K) > .
+ rl res(EO1, Sigma1, Out1, kB1x8(E2, K)) => b1(oGt, EO1, E2, Sigma1, Out1, K) .
+ rl < E1 >= E2, Sigma, Out | K > => < E1, Sigma, Out | kB1x9(E2, K) > .
+ rl res(EO1, Sigma1, Out1, kB1x9(E2, K)) => b1(oGe, EO1, E2, Sigma1, Out1, K) .
+ rl < E1 eqq E2, Sigma, Out | K > => < E1, Sigma, Out | kB1x10(E2, K) > .
+ rl res(EO1, Sigma1, Out1, kB1x10(E2, K)) => b1(oEq, EO1, E2, Sigma1, Out1, K) .
+ rl < E1 neq E2, Sigma, Out | K > => < E1, Sigma, Out | kB1x11(E2, K) > .
+ rl res(EO1, Sigma1, Out1, kB1x11(E2, K)) => b1(oNe, EO1, E2, Sigma1, Out1, K) .
+ rl < E1 in E2, Sigma, Out | K > => < E1, Sigma, Out | kB1x12(E2, K) > .
+ rl res(EO1, Sigma1, Out1, kB1x12(E2, K)) => b1(oIn, EO1, E2, Sigma1, Out1, K) .
+ rl < E1 ! E2, Sigma, Out | K > => < E1, Sigma, Out | kB1x13(E2, K) > .
+ rl res(EO1, Sigma1, Out1, kB1x13(E2, K)) => b1(oIdx, EO1, E2, Sigma1, Out1, K) .
+ rl b1(OP, V1, E2, Sigma1, Out1, K) => < E2, Sigma1, Out1 | kB2(OP, V1, K) > .
+ rl res(EO2, Sigma2, Out2, kB2(OP, V1, K)) => b2(OP, V1, EO2, Sigma2, Out2, K) .
+ rl b1(OP, xraised(V, Sigma2), E2, Sigma1, Out1, K) => res(xraised(V, Sigma2), Sigma2, Out1, K) .
   --- the operands are dereferenced to their heap objects first [deeply for == / !=]
   op dr : OpC State Value -> Value .
   eq dr(oEq, Sigma, V) = deep(Sigma, V) .
@@ -363,38 +440,35 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   op sameRef : Value Value -> Bool .
   eq sameRef(ref(N), ref(N)) = true .
   eq sameRef(V1, V2) = false [owise] .
- crl b2(OP, V1, V2, Sigma2, Out2) => bin(OP, dr(OP, Sigma2, V1), dr(OP, Sigma2, V2), Sigma2, Out2)
-   if notBool (sameRef(V1, V2) andBool ((OP ==Bool oEq) orBool (OP ==Bool oNe))) .
-  rl b2(oEq, ref(N), ref(N), Sigma2, Out2) => res(true, Sigma2, Out2) .
-  rl b2(oNe, ref(N), ref(N), Sigma2, Out2) => res(false, Sigma2, Out2) .
-  rl b2(OP, V1, xraised(V, Sigma3), Sigma2, Out2) => res(xraised(V, Sigma3), Sigma3, Out2) .
-  rl u1(OP, V, Sigma1, Out1) => un(OP, deref(Sigma1, V), Sigma1, Out1) .
-  rl u1(OP, xraised(V, Sigma2), Sigma1, Out1) => res(xraised(V, Sigma2), Sigma2, Out1) .
- crl < uminus E, Sigma, Out > => u1(oNeg, EO1, Sigma1, Out1)
-    if < E, Sigma, Out > => res(EO1, Sigma1, Out1) .
- crl < not E, Sigma, Out > => u1(oNot, EO1, Sigma1, Out1)
-    if < E, Sigma, Out > => res(EO1, Sigma1, Out1) .
- crl < len(E), Sigma, Out > => u1(oLen, EO1, Sigma1, Out1)
-    if < E, Sigma, Out > => res(EO1, Sigma1, Out1) .
-  rl un(oNeg, I, Sigma, Out1) => res(-Int I, Sigma, Out1) .
-  rl un(oNot, V, Sigma, Out1) => res(notBool truthy(V), Sigma, Out1) .
+ crl b2(OP, V1, V2, Sigma2, Out2, K) => bin(OP, dr(OP, Sigma2, V1), dr(OP, Sigma2, V2), Sigma2, Out2, K) if notBool (sameRef(V1, V2) andBool ((OP ==Bool oEq) orBool (OP ==Bool oNe))) .
+ rl b2(oEq, ref(N), ref(N), Sigma2, Out2, K) => res(true, Sigma2, Out2, K) .
+ rl b2(oNe, ref(N), ref(N), Sigma2, Out2, K) => res(false, Sigma2, Out2, K) .
+ rl b2(OP, V1, xraised(V, Sigma3), Sigma2, Out2, K) => res(xraised(V, Sigma3), Sigma3, Out2, K) .
+ rl u1(OP, V, Sigma1, Out1, K) => un(OP, deref(Sigma1, V), Sigma1, Out1, K) .
+ rl u1(OP, xraised(V, Sigma2), Sigma1, Out1, K) => res(xraised(V, Sigma2), Sigma2, Out1, K) .
+ rl < uminus E, Sigma, Out | K > => < E, Sigma, Out | kU1(K) > .
+ rl res(EO1, Sigma1, Out1, kU1(K)) => u1(oNeg, EO1, Sigma1, Out1, K) .
+ rl < not E, Sigma, Out | K > => < E, Sigma, Out | kU1x2(K) > .
+ rl res(EO1, Sigma1, Out1, kU1x2(K)) => u1(oNot, EO1, Sigma1, Out1, K) .
+ rl < len(E), Sigma, Out | K > => < E, Sigma, Out | kU1x3(K) > .
+ rl res(EO1, Sigma1, Out1, kU1x3(K)) => u1(oLen, EO1, Sigma1, Out1, K) .
+ rl un(oNeg, I, Sigma, Out1, K) => res(-Int I, Sigma, Out1, K) .
+ rl un(oNot, V, Sigma, Out1, K) => res(notBool truthy(V), Sigma, Out1, K) .
 
   --- ----- arithmetic [Int + Int = Int] ----------------------
- rl bin(oPlus, I1, I2, Sigma, Out2) => res(I1 +Int I2, Sigma, Out2) .
- rl bin(oMinus, I1, I2, Sigma, Out2) => res(I1 -Int I2, Sigma, Out2) .
- rl bin(oTimes, I1, I2, Sigma, Out2) => res(I1 *Int I2, Sigma, Out2) .
- crl bin(oFdiv, I1, I2, Sigma, Out2) => res(floorDiv(I1, I2), Sigma, Out2)
-   if I2 =/=Bool 0 .
- crl bin(oMod, I1, I2, Sigma, Out2) => res(floorMod(I1, I2), Sigma, Out2)
-   if I2 =/=Bool 0 .
+ rl bin(oPlus, I1, I2, Sigma, Out2, K) => res(I1 +Int I2, Sigma, Out2, K) .
+ rl bin(oMinus, I1, I2, Sigma, Out2, K) => res(I1 -Int I2, Sigma, Out2, K) .
+ rl bin(oTimes, I1, I2, Sigma, Out2, K) => res(I1 *Int I2, Sigma, Out2, K) .
+ crl bin(oFdiv, I1, I2, Sigma, Out2, K) => res(floorDiv(I1, I2), Sigma, Out2, K) if I2 =/=Bool 0 .
+ crl bin(oMod, I1, I2, Sigma, Out2, K) => res(floorMod(I1, I2), Sigma, Out2, K) if I2 =/=Bool 0 .
 
   --- ----- string concatenation [String + String = String] ----
- rl bin(oPlus, S1, S2, Sigma, Out2) => res(S1 +String S2, Sigma, Out2) .
+ rl bin(oPlus, S1, S2, Sigma, Out2, K) => res(S1 +String S2, Sigma, Out2, K) .
 
   --- ----- string repetition [String * Int = String] ----------
   --- Python: "ab" * 3 == "ababab".  Implemented via an auxiliary.
- rl bin(oTimes, S1, I2, Sigma, Out2) => res(strRep(S1, I2), Sigma, Out2) .
- rl bin(oTimes, I1, S2, Sigma, Out2) => res(strRep(S2, I1), Sigma, Out2) .
+ rl bin(oTimes, S1, I2, Sigma, Out2, K) => res(strRep(S1, I2), Sigma, Out2, K) .
+ rl bin(oTimes, I1, S2, Sigma, Out2, K) => res(strRep(S2, I1), Sigma, Out2, K) .
 
   op strRep : String Int -> String .
   eq strRep(S, 0) = "" .
@@ -402,8 +476,8 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  ceq strRep(S, I) = "" if I <=Int 0 .
 
   --- ----- len[_] -------------------------------------------
- rl un(oLen, S, Sigma, Out') => res(length(S), Sigma, Out') .
- rl un(oLen, listV(L), Sigma, Out') => res(lstLen(L), Sigma, Out') .
+ rl un(oLen, S, Sigma, Out', K) => res(length(S), Sigma, Out', K) .
+ rl un(oLen, listV(L), Sigma, Out', K) => res(lstLen(L), Sigma, Out', K) .
 
   --- ----- list literal: evaluate elements left-to-right ------
   --- A raise in an element propagates [cycle 15]; the State threads.
@@ -412,58 +486,54 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   --- rest of the list inside a condition, so a call inside a literal or an
   --- argument list ran 4 times [two nested searches per element]; nested
   --- literals multiplied it per level.
-  op evalElts : ExpList ListObj State Out -> Configuration .
-  op eltsK : ExpOut ExpList ListObj State Out -> Configuration .
-  rl  evalElts(nilE, L, Sigma, Out) => resL(L, Sigma, Out) .
- crl evalElts(consE(E, EL), L, Sigma, Out) => eltsK(EO, EL, L, Sigma1, Out1)
-    if < E, Sigma, Out > => res(EO, Sigma1, Out1) .
-  rl eltsK(V, EL, L, Sigma1, Out1) => evalElts(EL, lstAppend(L, V), Sigma1, Out1) .
-  rl eltsK(xraised(V, Sigma2), EL, L, Sigma1, Out1) => resL(xraised(V, Sigma2), Sigma2, Out1) .
-  op litK : ListOut State Out -> Configuration .
- crl < listLit(EL), Sigma, Out > => litK(LO, Sigma1, Out1)
-   if evalElts(EL, nil, Sigma, Out) => resL(LO, Sigma1, Out1) .
-  rl litK(L, Sigma1, Out1) => alloc(listV(L), Sigma1, Out1) .
-  rl litK(xraised(V, Sigma2), Sigma1, Out1) => res(xraised(V, Sigma2), Sigma2, Out1) .
+  op evalElts : ExpList ListObj State Out Kont -> Configuration .
+  op eltsK : ExpOut ExpList ListObj State Out Kont -> Configuration .
+ rl evalElts(nilE, L, Sigma, Out, K) => resL(L, Sigma, Out, K) .
+ rl evalElts(consE(E, EL), L, Sigma, Out, K) => < E, Sigma, Out | kEltsK(EL, L, K) > .
+ rl res(EO, Sigma1, Out1, kEltsK(EL, L, K)) => eltsK(EO, EL, L, Sigma1, Out1, K) .
+ rl eltsK(V, EL, L, Sigma1, Out1, K) => evalElts(EL, lstAppend(L, V), Sigma1, Out1, K) .
+ rl eltsK(xraised(V, Sigma2), EL, L, Sigma1, Out1, K) => resL(xraised(V, Sigma2), Sigma2, Out1, K) .
+  op litK : ListOut State Out Kont -> Configuration .
+ rl < listLit(EL), Sigma, Out | K > => evalElts(EL, nil, Sigma, Out, kLitK(K)) .
+ rl resL(LO, Sigma1, Out1, kLitK(K)) => litK(LO, Sigma1, Out1, K) .
+ rl litK(L, Sigma1, Out1, K) => alloc(listV(L), Sigma1, Out1, K) .
+ rl litK(xraised(V, Sigma2), Sigma1, Out1, K) => res(xraised(V, Sigma2), Sigma2, Out1, K) .
 
   --- ----- list indexing: xs ! i  [Python xs[i]] -----------
- crl bin(oIdx, listV(L), I, Sigma, Out2) => res(lstIdx(L, I), Sigma, Out2)
-   if I >=Int 0
-   /\ I <Int lstLen(L) .
+ crl bin(oIdx, listV(L), I, Sigma, Out2, K) => res(lstIdx(L, I), Sigma, Out2, K) if I >=Int 0 /\ I <Int lstLen(L) .
   --- [out-of-range indexing is currently stuck; cycle 7 will raise IndexError]
   --- cycle 18: a negative index counts from the end [xs[-1]]
- crl bin(oIdx, listV(L), I, Sigma, Out2) => res(lstIdx(L, I +Int lstLen(L)), Sigma, Out2)
-   if I <Int 0
-   /\ I +Int lstLen(L) >=Int 0 .
+ crl bin(oIdx, listV(L), I, Sigma, Out2, K) => res(lstIdx(L, I +Int lstLen(L)), Sigma, Out2, K) if I <Int 0 /\ I +Int lstLen(L) >=Int 0 .
 
   --- ----- list `+` concat -------------------------------
- rl bin(oPlus, listV(L1), listV(L2), Sigma, Out2) => alloc(listV(lstConcat(L1, L2)), Sigma, Out2) .
+ rl bin(oPlus, listV(L1), listV(L2), Sigma, Out2, K) => alloc(listV(lstConcat(L1, L2)), Sigma, Out2, K) .
 
   --- ----- list `*` repetition: lst * n / n * lst --------
   op lstRep : ListObj Int -> ListObj .
   eq lstRep(L, 0) = nil .
  ceq lstRep(L, I) = lstConcat(L, lstRep(L, I -Int 1)) if I >Int 0 .
  ceq lstRep(L, I) = nil if I <=Int 0 .
- rl bin(oTimes, listV(L1), I2, Sigma, Out2) => alloc(listV(lstRep(L1, I2)), Sigma, Out2) .
- rl bin(oTimes, I1, listV(L2), Sigma, Out2) => alloc(listV(lstRep(L2, I1)), Sigma, Out2) .
+ rl bin(oTimes, listV(L1), I2, Sigma, Out2, K) => alloc(listV(lstRep(L1, I2)), Sigma, Out2, K) .
+ rl bin(oTimes, I1, listV(L2), Sigma, Out2, K) => alloc(listV(lstRep(L2, I1)), Sigma, Out2, K) .
 
   --- ----- comparison ---------------------------------------
   --- Numeric comparisons.
- rl bin(oLt, I1, I2, Sigma, Out2) => res((I1 <=Int I2) andBool (I1 =/=Bool I2), Sigma, Out2) .
- rl bin(oLe, I1, I2, Sigma, Out2) => res(I1 <=Int I2, Sigma, Out2) .
- rl bin(oGt, I1, I2, Sigma, Out2) => res((I2 <=Int I1) andBool (I1 =/=Bool I2), Sigma, Out2) .
- rl bin(oGe, I1, I2, Sigma, Out2) => res(I2 <=Int I1, Sigma, Out2) .
+ rl bin(oLt, I1, I2, Sigma, Out2, K) => res((I1 <=Int I2) andBool (I1 =/=Bool I2), Sigma, Out2, K) .
+ rl bin(oLe, I1, I2, Sigma, Out2, K) => res(I1 <=Int I2, Sigma, Out2, K) .
+ rl bin(oGt, I1, I2, Sigma, Out2, K) => res((I2 <=Int I1) andBool (I1 =/=Bool I2), Sigma, Out2, K) .
+ rl bin(oGe, I1, I2, Sigma, Out2, K) => res(I2 <=Int I1, Sigma, Out2, K) .
 
   --- Equality / disequality work on any value pair [int vs int,
   --- string vs string, bool vs bool, none vs none, mixed-type yields
   --- false].  We use Maude's polymorphic ==Bool / =/=Bool.
- rl bin(oEq, V1, V2, Sigma, Out2) => res(V1 ==Bool V2, Sigma, Out2) .
- rl bin(oNe, V1, V2, Sigma, Out2) => res(V1 =/=Bool V2, Sigma, Out2) .
+ rl bin(oEq, V1, V2, Sigma, Out2, K) => res(V1 ==Bool V2, Sigma, Out2, K) .
+ rl bin(oNe, V1, V2, Sigma, Out2, K) => res(V1 =/=Bool V2, Sigma, Out2, K) .
 
   --- String <, <=, >, >= [Python lexicographic compare]
- rl bin(oLt, S1, S2, Sigma, Out2) => res(strLt(S1, S2), Sigma, Out2) .
- rl bin(oLe, S1, S2, Sigma, Out2) => res(strLt(S1, S2) orBool (S1 ==Bool S2), Sigma, Out2) .
- rl bin(oGt, S1, S2, Sigma, Out2) => res(strLt(S2, S1), Sigma, Out2) .
- rl bin(oGe, S1, S2, Sigma, Out2) => res(strLt(S2, S1) orBool (S1 ==Bool S2), Sigma, Out2) .
+ rl bin(oLt, S1, S2, Sigma, Out2, K) => res(strLt(S1, S2), Sigma, Out2, K) .
+ rl bin(oLe, S1, S2, Sigma, Out2, K) => res(strLt(S1, S2) orBool (S1 ==Bool S2), Sigma, Out2, K) .
+ rl bin(oGt, S1, S2, Sigma, Out2, K) => res(strLt(S2, S1), Sigma, Out2, K) .
+ rl bin(oGe, S1, S2, Sigma, Out2, K) => res(strLt(S2, S1) orBool (S1 ==Bool S2), Sigma, Out2, K) .
 
   op strLt : String String -> Bool .
  ceq strLt(S1, S2) = true  if (rat-substr-cmp(S1, S2)) <Int 0 .
@@ -490,80 +560,71 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   --- coerced bool: `0 or 5 == 5`, `5 and 7 == 7`.  We implement that.
  --- one evaluation of E1, then a dispatch [a raise in either operand
  --- propagates; E2 is evaluated only when the short-circuit allows].
- crl < E1 and E2, Sigma, Out > => andK(EO1, E2, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
- crl < E1 or E2, Sigma, Out > => orK(EO1, E2, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
-  op andK : ExpOut Exp State Out -> Configuration .
-  op orK  : ExpOut Exp State Out -> Configuration .
-  rl andK(xraised(V, Sigma2), E2, Sigma1, Out1) => res(xraised(V, Sigma2), Sigma2, Out1) .
-  rl orK(xraised(V, Sigma2), E2, Sigma1, Out1)  => res(xraised(V, Sigma2), Sigma2, Out1) .
- crl andK(V1, E2, Sigma1, Out1) => res(V1, Sigma1, Out1)  if truthy(deref(Sigma1, V1)) ==Bool false .
- crl andK(V1, E2, Sigma1, Out1) => < E2, Sigma1, Out1 >
-    if truthy(deref(Sigma1, V1)) ==Bool true .
- crl orK(V1, E2, Sigma1, Out1) => res(V1, Sigma1, Out1)   if truthy(deref(Sigma1, V1)) ==Bool true .
- crl orK(V1, E2, Sigma1, Out1) => < E2, Sigma1, Out1 >
-    if truthy(deref(Sigma1, V1)) ==Bool false .
+ rl < E1 and E2, Sigma, Out | K > => < E1, Sigma, Out | kAndK(E2, K) > .
+ rl res(EO1, Sigma1, Out1, kAndK(E2, K)) => andK(EO1, E2, Sigma1, Out1, K) .
+ rl < E1 or E2, Sigma, Out | K > => < E1, Sigma, Out | kOrK(E2, K) > .
+ rl res(EO1, Sigma1, Out1, kOrK(E2, K)) => orK(EO1, E2, Sigma1, Out1, K) .
+  op andK : ExpOut Exp State Out Kont -> Configuration .
+  op orK  : ExpOut Exp State Out Kont -> Configuration .
+ rl andK(xraised(V, Sigma2), E2, Sigma1, Out1, K) => res(xraised(V, Sigma2), Sigma2, Out1, K) .
+ rl orK(xraised(V, Sigma2), E2, Sigma1, Out1, K) => res(xraised(V, Sigma2), Sigma2, Out1, K) .
+ crl andK(V1, E2, Sigma1, Out1, K) => res(V1, Sigma1, Out1, K) if truthy(deref(Sigma1, V1)) ==Bool false .
+ crl andK(V1, E2, Sigma1, Out1, K) => < E2, Sigma1, Out1 | K > if truthy(deref(Sigma1, V1)) ==Bool true .
+ crl orK(V1, E2, Sigma1, Out1, K) => res(V1, Sigma1, Out1, K) if truthy(deref(Sigma1, V1)) ==Bool true .
+ crl orK(V1, E2, Sigma1, Out1, K) => < E2, Sigma1, Out1 | K > if truthy(deref(Sigma1, V1)) ==Bool false .
 
   --- ----- statements ----------------------------------------
-  rl < pass, Sigma, Out > => < Sigma, Out > .
+ rl < pass, Sigma, Out | K > => < Sigma, Out | K > .
 
- crl < X := E, Sigma, Out > => asgK(EO, X, Sigma1, Out')
-    if < E, Sigma, Out > => res(EO, Sigma1, Out') .
-  op asgK : ExpOut Id State Out -> Configuration .
-  rl asgK(V, X, Sigma1, Out')                 => < asgn(Sigma1, X, V), Out' > .
-  rl asgK(xraised(V, Sigma2), X, Sigma1, Out') => < raised(V, Sigma2), Out' > .
+ rl < X := E, Sigma, Out | K > => < E, Sigma, Out | kAsgK(X, K) > .
+ rl res(EO, Sigma1, Out', kAsgK(X, K)) => asgK(EO, X, Sigma1, Out', K) .
+  op asgK : ExpOut Id State Out Kont -> Configuration .
+ rl asgK(V, X, Sigma1, Out', K) => < asgn(Sigma1, X, V), Out' | K > .
+ rl asgK(xraised(V, Sigma2), X, Sigma1, Out', K) => < raised(V, Sigma2), Out' | K > .
 
- crl < print(E), Sigma, Out > => printK(EO, Sigma1, Out')
-    if < E, Sigma, Out > => res(EO, Sigma1, Out') .
-  op printK : ExpOut State Out -> Configuration .
-  rl printK(V, Sigma1, Out')                 => < Sigma1, Out' :: deep(Sigma1, V) > .
-  rl printK(xraised(V, Sigma2), Sigma1, Out') => < raised(V, Sigma2), Out' > .
+ rl < print(E), Sigma, Out | K > => < E, Sigma, Out | kPrintK(K) > .
+ rl res(EO, Sigma1, Out', kPrintK(K)) => printK(EO, Sigma1, Out', K) .
+  op printK : ExpOut State Out Kont -> Configuration .
+ rl printK(V, Sigma1, Out', K) => < Sigma1, Out' :: deep(Sigma1, V) | K > .
+ rl printK(xraised(V, Sigma2), Sigma1, Out', K) => < raised(V, Sigma2), Out' | K > .
 
   --- xs.append[v]: append v to the heap object behind xs; the argument is
   --- evaluated first, then xs is read in the State it left [it may have
   --- changed xs through a call].
- crl < X .append(E), Sigma, Out > => appK(EO, X, Sigma1, Out')
-    if < E, Sigma, Out > => res(EO, Sigma1, Out') .
-  op appK : ExpOut Id State Out -> Configuration .
- crl appK(V, X, Sigma1, Out') => < hset(Sigma1, N, listV(lstAppend(L, V))), Out' >
-   if unb(Sigma1, X) =/=Bool true /\ ref(N) := look(Sigma1, X) /\ listV(L) := hget(Sigma1, N) .
- crl appK(V, X, Sigma1, Out') => < raised("NameError", Sigma1), Out' >
-   if und(Sigma1, X) .
- crl appK(V, X, Sigma1, Out') => < raised("UnboundLocalError", Sigma1), Out' >
-   if unb(Sigma1, X) .   --- cycle 17: xs is a local that has no value yet
-  rl appK(xraised(V, Sigma2), X, Sigma1, Out') => < raised(V, Sigma2), Out' > .
+ rl < X .append(E), Sigma, Out | K > => < E, Sigma, Out | kAppK(X, K) > .
+ rl res(EO, Sigma1, Out', kAppK(X, K)) => appK(EO, X, Sigma1, Out', K) .
+  op appK : ExpOut Id State Out Kont -> Configuration .
+ crl appK(V, X, Sigma1, Out', K) => < hset(Sigma1, N, listV(lstAppend(L, V))), Out' | K > if unb(Sigma1, X) =/=Bool true /\ ref(N) := look(Sigma1, X) /\ listV(L) := hget(Sigma1, N) .
+ crl appK(V, X, Sigma1, Out', K) => < raised("NameError", Sigma1), Out' | K > if und(Sigma1, X) .
+  --- cycle 17: xs is a local that has no value yet
+ crl appK(V, X, Sigma1, Out', K) => < raised("UnboundLocalError", Sigma1), Out' | K > if unb(Sigma1, X) .
+ rl appK(xraised(V, Sigma2), X, Sigma1, Out', K) => < raised(V, Sigma2), Out' | K > .
 
   --- xs[i] = v  [list: replace element i of the heap object; dict: set
   --- the key].  As in CPython the value is evaluated before the index.
-  op ix1 : ExpOut Id Exp State Out -> Configuration .
-  op ix2 : Value ExpOut Id State Out -> Configuration .
-  op ix3 : Value Value Id State Out -> Configuration .
- crl < X [E1] := E2, Sigma, Out > => ix1(EO1, X, E1, Sigma1, Out1)
-    if < E2, Sigma, Out > => res(EO1, Sigma1, Out1) .
-  rl ix1(xraised(V, Sigma2), X, E1, Sigma1, Out1) => < raised(V, Sigma2), Out1 > .
- crl ix1(V1, X, E1, Sigma1, Out1) => ix2(V1, EO2, X, Sigma2, Out2)
-    if < E1, Sigma1, Out1 > => res(EO2, Sigma2, Out2) .
-  rl ix2(V1, xraised(V, Sigma3), X, Sigma2, Out2) => < raised(V, Sigma3), Out2 > .
- crl ix2(V1, V2, X, Sigma2, Out2) => ix3(V1, V2, X, Sigma2, Out2)
-   if unb(Sigma2, X) =/=Bool true /\ und(Sigma2, X) =/=Bool true .
- crl ix2(V1, V2, X, Sigma2, Out2) => < raised("NameError", Sigma2), Out2 >
-   if und(Sigma2, X) .
- crl ix2(V1, V2, X, Sigma2, Out2) => < raised("UnboundLocalError", Sigma2), Out2 >
-   if unb(Sigma2, X) .   --- cycle 17: the target is a local that has no value yet
- crl ix3(V1, I, X, Sigma2, Out2) => < hset(Sigma2, N, listV(lstSet(L, I, V1))), Out2 >
-   if ref(N) := look(Sigma2, X) /\ listV(L) := hget(Sigma2, N) /\ I >=Int 0 /\ I <Int lstLen(L) .
- crl ix3(V1, I, X, Sigma2, Out2) => < hset(Sigma2, N, listV(lstSet(L, I +Int lstLen(L), V1))), Out2 >
-   if ref(N) := look(Sigma2, X) /\ listV(L) := hget(Sigma2, N) /\ I <Int 0 /\ I +Int lstLen(L) >=Int 0 .
- crl ix3(V1, Vk, X, Sigma2, Out2) => < hset(Sigma2, N, dictV(dictSet(D, Vk, V1))), Out2 >
-   if ref(N) := look(Sigma2, X) /\ dictV(D) := hget(Sigma2, N) .
+  op ix1 : ExpOut Id Exp State Out Kont -> Configuration .
+  op ix2 : Value ExpOut Id State Out Kont -> Configuration .
+  op ix3 : Value Value Id State Out Kont -> Configuration .
+ rl < X [E1] := E2, Sigma, Out | K > => < E2, Sigma, Out | kIx1(X, E1, K) > .
+ rl res(EO1, Sigma1, Out1, kIx1(X, E1, K)) => ix1(EO1, X, E1, Sigma1, Out1, K) .
+ rl ix1(xraised(V, Sigma2), X, E1, Sigma1, Out1, K) => < raised(V, Sigma2), Out1 | K > .
+ rl ix1(V1, X, E1, Sigma1, Out1, K) => < E1, Sigma1, Out1 | kIx2(V1, X, K) > .
+ rl res(EO2, Sigma2, Out2, kIx2(V1, X, K)) => ix2(V1, EO2, X, Sigma2, Out2, K) .
+ rl ix2(V1, xraised(V, Sigma3), X, Sigma2, Out2, K) => < raised(V, Sigma3), Out2 | K > .
+ crl ix2(V1, V2, X, Sigma2, Out2, K) => ix3(V1, V2, X, Sigma2, Out2, K) if unb(Sigma2, X) =/=Bool true /\ und(Sigma2, X) =/=Bool true .
+ crl ix2(V1, V2, X, Sigma2, Out2, K) => < raised("NameError", Sigma2), Out2 | K > if und(Sigma2, X) .
+  --- cycle 17: the target is a local that has no value yet
+ crl ix2(V1, V2, X, Sigma2, Out2, K) => < raised("UnboundLocalError", Sigma2), Out2 | K > if unb(Sigma2, X) .
+ crl ix3(V1, I, X, Sigma2, Out2, K) => < hset(Sigma2, N, listV(lstSet(L, I, V1))), Out2 | K > if ref(N) := look(Sigma2, X) /\ listV(L) := hget(Sigma2, N) /\ I >=Int 0 /\ I <Int lstLen(L) .
+ crl ix3(V1, I, X, Sigma2, Out2, K) => < hset(Sigma2, N, listV(lstSet(L, I +Int lstLen(L), V1))), Out2 | K > if ref(N) := look(Sigma2, X) /\ listV(L) := hget(Sigma2, N) /\ I <Int 0 /\ I +Int lstLen(L) >=Int 0 .
+ crl ix3(V1, Vk, X, Sigma2, Out2, K) => < hset(Sigma2, N, dictV(dictSet(D, Vk, V1))), Out2 | K > if ref(N) := look(Sigma2, X) /\ dictV(D) := hget(Sigma2, N) .
 
   --- x += e / x *= e [cycle 17].  x is read first, then e; a list is changed IN
   --- PLACE in its heap object [so every alias sees it] and x is rebound to the
   --- same ref; any other value gets the plain operator.  A raise anywhere
   --- propagates.
-  op augA : OpC Id ExpOut Exp State Out -> Configuration .
-  op augB : OpC Id Value ExpOut State Out -> Configuration .
+  op augA : OpC Id ExpOut Exp State Out Kont -> Configuration .
+  op augB : OpC Id Value ExpOut State Out Kont -> Configuration .
   --- Cycle 18: list `+=` takes any iterable [list, tuple, string, dict keys] like
   --- list.extend, and `*=` repeats; ipl says the in-place case applies, inplace does it.
   op ipl : OpC State Value Value -> Bool .
@@ -594,20 +655,17 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
    if listV(La) := hget(Sigma, Ma) .
  ceq inplace(oTimes, Sigma, ref(Ma), I) = hset(Sigma, Ma, listV(lstRep(La, I)))
    if listV(La) := hget(Sigma, Ma) .
- crl < augAdd(X, E), Sigma, Out > => augA(oPlus, X, EO, E, Sigma1, Out1)
-   if < X, Sigma, Out > => res(EO, Sigma1, Out1) .
- crl < augMul(X, E), Sigma, Out > => augA(oTimes, X, EO, E, Sigma1, Out1)
-   if < X, Sigma, Out > => res(EO, Sigma1, Out1) .
-  rl augA(OP, X, xraised(V, Sigma2), E, Sigma1, Out1) => < raised(V, Sigma2), Out1 > .
- crl augA(OP, X, V1, E, Sigma1, Out1) => augB(OP, X, V1, EO, Sigma2, Out2)
-   if < E, Sigma1, Out1 > => res(EO, Sigma2, Out2) .
-  rl augB(OP, X, V1, xraised(V, Sigma3), Sigma2, Out2) => < raised(V, Sigma3), Out2 > .
- crl augB(OP, X, V1, V2, Sigma2, Out2)
-   => < asgn(inplace(OP, Sigma2, V1, V2), X, V1), Out2 >
-   if ipl(OP, Sigma2, V1, V2) .
- crl augB(OP, X, V1, V2, Sigma2, Out2) => asgK(EO, X, Sigma3, Out3)
-   if ipl(OP, Sigma2, V1, V2) =/=Bool true
-   /\ b2(OP, V1, V2, Sigma2, Out2) => res(EO, Sigma3, Out3) .
+ rl < augAdd(X, E), Sigma, Out | K > => < X, Sigma, Out | kAugA(X, E, K) > .
+ rl res(EO, Sigma1, Out1, kAugA(X, E, K)) => augA(oPlus, X, EO, E, Sigma1, Out1, K) .
+ rl < augMul(X, E), Sigma, Out | K > => < X, Sigma, Out | kAugAx2(X, E, K) > .
+ rl res(EO, Sigma1, Out1, kAugAx2(X, E, K)) => augA(oTimes, X, EO, E, Sigma1, Out1, K) .
+ rl augA(OP, X, xraised(V, Sigma2), E, Sigma1, Out1, K) => < raised(V, Sigma2), Out1 | K > .
+ rl augA(OP, X, V1, E, Sigma1, Out1, K) => < E, Sigma1, Out1 | kAugB(OP, X, V1, K) > .
+ rl res(EO, Sigma2, Out2, kAugB(OP, X, V1, K)) => augB(OP, X, V1, EO, Sigma2, Out2, K) .
+ rl augB(OP, X, V1, xraised(V, Sigma3), Sigma2, Out2, K) => < raised(V, Sigma3), Out2 | K > .
+ crl augB(OP, X, V1, V2, Sigma2, Out2, K) => < asgn(inplace(OP, Sigma2, V1, V2), X, V1), Out2 | K > if ipl(OP, Sigma2, V1, V2) .
+ crl augB(OP, X, V1, V2, Sigma2, Out2, K) => b2(OP, V1, V2, Sigma2, Out2, kAsgKx2(X, K)) if ipl(OP, Sigma2, V1, V2) =/=Bool true .
+ rl res(EO, Sigma3, Out3, kAsgKx2(X, K)) => asgK(EO, X, Sigma3, Out3, K) .
 
   --- x[i] op= e [cycle 18].  x, then i, then the old item, then e, in that order as in
   --- CPython; a list item is extended / repeated IN PLACE [so aliases of the inner list see
@@ -615,32 +673,30 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   op toOp : AugOp -> OpC .
   eq toOp(aPlus) = oPlus .  eq toOp(aMinus) = oMinus .  eq toOp(aTimes) = oTimes .
   eq toOp(aFdiv) = oFdiv .  eq toOp(aMod) = oMod .
-  op sa1 : AugOp ExpOut Exp Exp State Out -> Configuration .
-  op sa2 : AugOp Value ExpOut Exp State Out -> Configuration .
-  op sa3 : AugOp Value Value Value ExpOut State Out -> Configuration .
-  op sa4 : Value Value ExpOut State Out -> Configuration .
- crl < augSub(X, E1, E2, AOo), Sigma, Out > => sa1(AOo, EO, E1, E2, Sigma1, Out1)
-   if < X, Sigma, Out > => res(EO, Sigma1, Out1) .
-  rl sa1(AOo, xraised(V, Sigma2), E1, E2, Sigma1, Out1) => < raised(V, Sigma2), Out1 > .
- crl sa1(AOo, V1, E1, E2, Sigma1, Out1) => sa2(AOo, V1, EO, E2, Sigma2, Out2)
-   if < E1, Sigma1, Out1 > => res(EO, Sigma2, Out2) .
-  rl sa2(AOo, V1, xraised(V, Sigma3), E2, Sigma2, Out2) => < raised(V, Sigma3), Out2 > .
- crl sa2(AOo, V1, V2, E2, Sigma2, Out2) => sa3(AOo, V1, V2, Vrp, EO, Sigma3, Out3)
-   if b2(oIdx, V1, V2, Sigma2, Out2) => res(Vrp, Sigma2, Out2)
-   /\ < E2, Sigma2, Out2 > => res(EO, Sigma3, Out3) .
-  rl sa3(AOo, V1, V2, Vrp, xraised(V, Sigma4), Sigma3, Out3) => < raised(V, Sigma4), Out3 > .
- crl sa3(AOo, V1, V2, Vrp, V, Sigma3, Out3) => sa4(V1, V2, Vrp, inplace(toOp(AOo), Sigma3, Vrp, V), Out3)
-   if ipl(toOp(AOo), Sigma3, Vrp, V) .   --- CPython stores the result back [x[i] = x[i].__iadd__(e)] even when the list was changed in place
- crl sa3(AOo, V1, V2, Vrp, V, Sigma3, Out3) => sa4(V1, V2, EO, Sigma4, Out4)
-   if ipl(toOp(AOo), Sigma3, Vrp, V) =/=Bool true
-   /\ b2(toOp(AOo), Vrp, V, Sigma3, Out3) => res(EO, Sigma4, Out4) .
-  rl sa4(V1, V2, xraised(V, Sigma5), Sigma4, Out4) => < raised(V, Sigma5), Out4 > .
- crl sa4(ref(N), I, V, Sigma4, Out4) => < hset(Sigma4, N, listV(lstSet(L, I, V))), Out4 >
-   if listV(L) := hget(Sigma4, N) /\ I >=Int 0 /\ I <Int lstLen(L) .
- crl sa4(ref(N), I, V, Sigma4, Out4) => < hset(Sigma4, N, listV(lstSet(L, I +Int lstLen(L), V))), Out4 >
-   if listV(L) := hget(Sigma4, N) /\ I <Int 0 /\ I +Int lstLen(L) >=Int 0 .
- crl sa4(ref(N), Vk, V, Sigma4, Out4) => < hset(Sigma4, N, dictV(dictSet(D, Vk, V))), Out4 >
-   if dictV(D) := hget(Sigma4, N) .
+  op sa1 : AugOp ExpOut Exp Exp State Out Kont -> Configuration .
+  op sa2 : AugOp Value ExpOut Exp State Out Kont -> Configuration .
+  op sa2b : AugOp Value Value Value Exp State Out Kont -> Configuration .
+  op sa3 : AugOp Value Value Value ExpOut State Out Kont -> Configuration .
+  op sa4 : Value Value ExpOut State Out Kont -> Configuration .
+ rl < augSub(X, E1, E2, AOo), Sigma, Out | K > => < X, Sigma, Out | kSa1(E1, E2, AOo, K) > .
+ rl res(EO, Sigma1, Out1, kSa1(E1, E2, AOo, K)) => sa1(AOo, EO, E1, E2, Sigma1, Out1, K) .
+ rl sa1(AOo, xraised(V, Sigma2), E1, E2, Sigma1, Out1, K) => < raised(V, Sigma2), Out1 | K > .
+ rl sa1(AOo, V1, E1, E2, Sigma1, Out1, K) => < E1, Sigma1, Out1 | kSa2(AOo, V1, E2, K) > .
+ rl res(EO, Sigma2, Out2, kSa2(AOo, V1, E2, K)) => sa2(AOo, V1, EO, E2, Sigma2, Out2, K) .
+ rl sa2(AOo, V1, xraised(V, Sigma3), E2, Sigma2, Out2, K) => < raised(V, Sigma3), Out2 | K > .
+ rl sa2(AOo, V1, V2, E2, Sigma2, Out2, K) => b2(oIdx, V1, V2, Sigma2, Out2, kSa2b(AOo, V1, V2, E2, K)) .
+ rl res(Vrp, Sigma2b, Out2b, kSa2b(AOo, V1, V2, E2, K)) => sa2b(AOo, V1, V2, Vrp, E2, Sigma2b, Out2b, K) .
+ rl sa2b(AOo, V1, V2, Vrp, E2, Sigma2, Out2, K) => < E2, Sigma2, Out2 | kSa3(AOo, V1, V2, Vrp, K) > .
+ rl res(EO, Sigma3, Out3, kSa3(AOo, V1, V2, Vrp, K)) => sa3(AOo, V1, V2, Vrp, EO, Sigma3, Out3, K) .
+ rl sa3(AOo, V1, V2, Vrp, xraised(V, Sigma4), Sigma3, Out3, K) => < raised(V, Sigma4), Out3 | K > .
+  --- CPython stores the result back [x[i] = x[i].__iadd__(e)] even when the list was changed in place
+ crl sa3(AOo, V1, V2, Vrp, V, Sigma3, Out3, K) => sa4(V1, V2, Vrp, inplace(toOp(AOo), Sigma3, Vrp, V), Out3, K) if ipl(toOp(AOo), Sigma3, Vrp, V) .
+ crl sa3(AOo, V1, V2, Vrp, V, Sigma3, Out3, K) => b2(toOp(AOo), Vrp, V, Sigma3, Out3, kSa4(V1, V2, K)) if ipl(toOp(AOo), Sigma3, Vrp, V) =/=Bool true .
+ rl res(EO, Sigma4, Out4, kSa4(V1, V2, K)) => sa4(V1, V2, EO, Sigma4, Out4, K) .
+ rl sa4(V1, V2, xraised(V, Sigma5), Sigma4, Out4, K) => < raised(V, Sigma5), Out4 | K > .
+ crl sa4(ref(N), I, V, Sigma4, Out4, K) => < hset(Sigma4, N, listV(lstSet(L, I, V))), Out4 | K > if listV(L) := hget(Sigma4, N) /\ I >=Int 0 /\ I <Int lstLen(L) .
+ crl sa4(ref(N), I, V, Sigma4, Out4, K) => < hset(Sigma4, N, listV(lstSet(L, I +Int lstLen(L), V))), Out4 | K > if listV(L) := hget(Sigma4, N) /\ I <Int 0 /\ I +Int lstLen(L) >=Int 0 .
+ crl sa4(ref(N), Vk, V, Sigma4, Out4, K) => < hset(Sigma4, N, dictV(dictSet(D, Vk, V))), Out4 | K > if dictV(D) := hget(Sigma4, N) .
 
   op lstSet : ListObj Int Value -> ListObj .
   vars Vh Vha : Value .  vars Lh : ListObj .
@@ -656,56 +712,54 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   --- re-ran St1 inside its condition, so every nesting level multiplied the
   --- work by ~20.  Now St1 runs once, and a helper op dispatches on the
   --- Outcome by pattern [exactly one of its rules can apply].
-  op seqK : Outcome Stmt Out -> Configuration .
+  op seqK : Outcome Stmt Out Kont -> Configuration .
   vars Outd : Outcome .
   --- normal flow: S2 runs in the State S1 produced.
-  rl seqK(Sigma1, St2, Out1) => < St2, Sigma1, Out1 > .
+ rl seqK(Sigma1, St2, Out1, K) => < St2, Sigma1, Out1 | K > .
   --- ret / raised / brk / cnt in S1 short-circuit: S2 is skipped.
-  rl seqK(ret(V, SigmaR), St2, Out1) => < ret(V, SigmaR), Out1 > .
-  rl seqK(raised(V, Sigma1), St2, Out1) => < raised(V, Sigma1), Out1 > .
-  rl seqK(brk(Sigma1), St2, Out1) => < brk(Sigma1), Out1 > .
-  rl seqK(cnt(Sigma1), St2, Out1) => < cnt(Sigma1), Out1 > .
- crl < St1 ; St2, Sigma, Out > => seqK(Outd, St2, Out1)
-    if < St1, Sigma, Out > => < Outd, Out1 > .
+ rl seqK(ret(V, SigmaR), St2, Out1, K) => < ret(V, SigmaR), Out1 | K > .
+ rl seqK(raised(V, Sigma1), St2, Out1, K) => < raised(V, Sigma1), Out1 | K > .
+ rl seqK(brk(Sigma1), St2, Out1, K) => < brk(Sigma1), Out1 | K > .
+ rl seqK(cnt(Sigma1), St2, Out1, K) => < cnt(Sigma1), Out1 | K > .
+ rl < St1 ; St2, Sigma, Out | K > => < St1, Sigma, Out | kSeqK(St2, K) > .
+ rl < Outd, Out1 | kSeqK(St2, K) > => seqK(Outd, St2, Out1, K) .
 
   --- break / continue [cycle 12]: carry the State at the jump.
- rl < breakStmt,    Sigma, Out > => < brk(Sigma), Out > .
- rl < continueStmt, Sigma, Out > => < cnt(Sigma), Out > .
+ rl < breakStmt, Sigma, Out | K > => < brk(Sigma), Out | K > .
+ rl < continueStmt, Sigma, Out | K > => < cnt(Sigma), Out | K > .
 
   --- if uses truthy[_] to match Python's "any value can be a condition"
- crl < ifelse(E){ St1 }else{ St2 }, Sigma, Out > => ifK(EO, St1, St2, Sigma1, Out1)
-    if < E, Sigma, Out > => res(EO, Sigma1, Out1) .
+ rl < ifelse(E){ St1 }else{ St2 }, Sigma, Out | K > => < E, Sigma, Out | kIfK(St1, St2, K) > .
+ rl res(EO, Sigma1, Out1, kIfK(St1, St2, K)) => ifK(EO, St1, St2, Sigma1, Out1, K) .
   --- the condition may raise; the raise propagates.
-  op ifK : ExpOut Stmt Stmt State Out -> Configuration .
- crl ifK(V, St1, St2, Sigma1, Out1) => < St1, Sigma1, Out1 >
-    if truthy(deref(Sigma1, V)) ==Bool true .
- crl ifK(V, St1, St2, Sigma1, Out1) => < St2, Sigma1, Out1 >
-    if truthy(deref(Sigma1, V)) ==Bool false .
-  rl ifK(xraised(V, Sigma2), St1, St2, Sigma1, Out1) => < raised(V, Sigma2), Out1 > .
+  op ifK : ExpOut Stmt Stmt State Out Kont -> Configuration .
+ crl ifK(V, St1, St2, Sigma1, Out1, K) => < St1, Sigma1, Out1 | K > if truthy(deref(Sigma1, V)) ==Bool true .
+ crl ifK(V, St1, St2, Sigma1, Out1, K) => < St2, Sigma1, Out1 | K > if truthy(deref(Sigma1, V)) ==Bool false .
+ rl ifK(xraised(V, Sigma2), St1, St2, Sigma1, Out1, K) => < raised(V, Sigma2), Out1 | K > .
 
   --- while [cycle 13: one rule; the body runs once per iteration].
-  op whileK  : Bool Exp Stmt State Out -> Configuration .   --- condition value decided
-  op whileB  : Outcome Exp Stmt Out -> Configuration .      --- body outcome decided
- crl < while(E){ St }, Sigma, Out > => whileC(EO, E, St, Sigma1, Out1)
-    if < E, Sigma, Out > => res(EO, Sigma1, Out1) .
+  op whileK  : Bool Exp Stmt State Out Kont -> Configuration .   --- condition value decided
+  op whileB  : Outcome Exp Stmt Out Kont -> Configuration .      --- body outcome decided
+ rl < while(E){ St }, Sigma, Out | K > => < E, Sigma, Out | kWhileC(E, St, K) > .
+ rl res(EO, Sigma1, Out1, kWhileC(E, St, K)) => whileC(EO, E, St, Sigma1, Out1, K) .
   --- the condition may raise; the raise propagates.
-  op whileC  : ExpOut Exp Stmt State Out -> Configuration .
-  rl whileC(V, E, St, Sigma1, Out1) => whileK(truthy(deref(Sigma1, V)), E, St, Sigma1, Out1) .
-  rl whileC(xraised(V, Sigma2), E, St, Sigma1, Out1) => < raised(V, Sigma2), Out1 > .
+  op whileC  : ExpOut Exp Stmt State Out Kont -> Configuration .
+ rl whileC(V, E, St, Sigma1, Out1, K) => whileK(truthy(deref(Sigma1, V)), E, St, Sigma1, Out1, K) .
+ rl whileC(xraised(V, Sigma2), E, St, Sigma1, Out1, K) => < raised(V, Sigma2), Out1 | K > .
   --- condition false -> exit normally.
-  rl whileK(false, E, St, Sigma, Out1) => < Sigma, Out1 > .
+ rl whileK(false, E, St, Sigma, Out1, K) => < Sigma, Out1 | K > .
   --- condition true -> run the body once and dispatch on its outcome.
- crl whileK(true, E, St, Sigma, Out1) => whileB(Outd, E, St, Out2)
-    if < St, Sigma, Out1 > => < Outd, Out2 > .
+ rl whileK(true, E, St, Sigma, Out1, K) => < St, Sigma, Out1 | kWhileB(E, St, K) > .
+ rl < Outd, Out2 | kWhileB(E, St, K) > => whileB(Outd, E, St, Out2, K) .
   --- body completed normally, or hit continue: test the condition again
   --- in the State at that point.
-  rl whileB(Sigma1, E, St, Out2) => < while(E){ St }, Sigma1, Out2 > .
-  rl whileB(cnt(Sigma1), E, St, Out2) => < while(E){ St }, Sigma1, Out2 > .
+ rl whileB(Sigma1, E, St, Out2, K) => < while(E){ St }, Sigma1, Out2 | K > .
+ rl whileB(cnt(Sigma1), E, St, Out2, K) => < while(E){ St }, Sigma1, Out2 | K > .
   --- body hit break: leave the loop normally in the State at the break.
-  rl whileB(brk(Sigma1), E, St, Out2) => < Sigma1, Out2 > .
+ rl whileB(brk(Sigma1), E, St, Out2, K) => < Sigma1, Out2 | K > .
   --- body returned / raised: propagate.
-  rl whileB(ret(V, SigmaR), E, St, Out2) => < ret(V, SigmaR), Out2 > .
-  rl whileB(raised(V, Sigma1), E, St, Out2) => < raised(V, Sigma1), Out2 > .
+ rl whileB(ret(V, SigmaR), E, St, Out2, K) => < ret(V, SigmaR), Out2 | K > .
+ rl whileB(raised(V, Sigma1), E, St, Out2, K) => < raised(V, Sigma1), Out2 | K > .
 
   --- ----- functions: def / return / call ------------------
   vars IL : IdList .  vars Body : Stmt .  vars VL : ValueList .
@@ -717,32 +771,31 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   --- def f[params]: body  -- bind f in current state to a function value.
   --- Inside a frame the captured State also records the function's own name
   --- [self], so a nested function can call itself [cycle 15].
- crl < def(X, IL, Body), Sigma, Out >
-    => < asgn(mark(Sigma[(N +Int 1) / nxtC]), X, funcV(IL, Body, capOf(Sigma) & (fid |-> N) & mkLocs(IL, Body))), Out >
-   if N := Sigma(nxtC) .    --- fid: a fresh function identity, so two separately made functions never compare equal
+  --- fid: a fresh function identity, so two separately made functions never compare equal
+ crl < def(X, IL, Body), Sigma, Out | K > => < asgn(mark(Sigma[(N +Int 1) / nxtC]), X, funcV(IL, Body, capOf(Sigma) & (fid |-> N) & mkLocs(IL, Body))), Out | K > if N := Sigma(nxtC) .
 
   --- bare return  -->  return None
-  rl < return, Sigma, Out > => < ret(none, Sigma), Out > .
+ rl < return, Sigma, Out | K > => < ret(none, Sigma), Out | K > .
 
   --- return e  -->  evaluate e, produce ret[V].
- crl < return(E), Sigma, Out > => retK(EO, Sigma1, Out')
-    if < E, Sigma, Out > => res(EO, Sigma1, Out') .
-  op retK : ExpOut State Out -> Configuration .
-  rl retK(V, Sigma1, Out')          => < ret(V, Sigma1), Out' > .
-  rl retK(xraised(V, Sigma2), Sigma1, Out') => < raised(V, Sigma2), Out' > .
+ rl < return(E), Sigma, Out | K > => < E, Sigma, Out | kRetK(K) > .
+ rl res(EO, Sigma1, Out', kRetK(K)) => retK(EO, Sigma1, Out', K) .
+  op retK : ExpOut State Out Kont -> Configuration .
+ rl retK(V, Sigma1, Out', K) => < ret(V, Sigma1), Out' | K > .
+ rl retK(xraised(V, Sigma2), Sigma1, Out', K) => < raised(V, Sigma2), Out' | K > .
 
   --- Helper: evaluate an ExpList left-to-right into a ValueList.  An argument
   --- may raise [ArgsOut = ValueList or xraised]; the State threads.
-  op evalArgs : ExpList ValueList State Out -> Configuration .
-  op argsK : ExpOut ExpList ValueList State Out -> Configuration .
+  op evalArgs : ExpList ValueList State Out Kont -> Configuration .
+  op argsK : ExpOut ExpList ValueList State Out Kont -> Configuration .
   op vlAppend : ValueList Value -> ValueList .
   eq vlAppend(nilVL, V) = consVL(V, nilVL) .
   eq vlAppend(consVL(V1, VL), V) = consVL(V1, vlAppend(VL, V)) .
-   rl evalArgs(nilE, VL, Sigma, Out) => resA(VL, Sigma, Out) .
-  crl evalArgs(consE(E, EL), VL, Sigma, Out) => argsK(EO, EL, VL, Sigma1, Out1)
-     if < E, Sigma, Out > => res(EO, Sigma1, Out1) .
-   rl argsK(V, EL, VL, Sigma1, Out1) => evalArgs(EL, vlAppend(VL, V), Sigma1, Out1) .
-   rl argsK(xraised(V, Sigma2), EL, VL, Sigma1, Out1) => resA(xraised(V, Sigma2), Sigma2, Out1) .
+ rl evalArgs(nilE, VL, Sigma, Out, K) => resA(VL, Sigma, Out, K) .
+ rl evalArgs(consE(E, EL), VL, Sigma, Out, K) => < E, Sigma, Out | kArgsK(EL, VL, K) > .
+ rl res(EO, Sigma1, Out1, kArgsK(EL, VL, K)) => argsK(EO, EL, VL, Sigma1, Out1, K) .
+ rl argsK(V, EL, VL, Sigma1, Out1, K) => evalArgs(EL, vlAppend(VL, V), Sigma1, Out1, K) .
+ rl argsK(xraised(V, Sigma2), EL, VL, Sigma1, Out1, K) => resA(xraised(V, Sigma2), Sigma2, Out1, K) .
 
   --- Call frame [cycle 16].  A call takes the fresh activation number N, whose
   --- parent is the activation the function was defined in [Capf(cur)], binds the
@@ -782,96 +835,91 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   --- after the call [the callee's cells stay on the heap, its activation is left].  An argument
   --- that raises propagates too.  The call's result carries the caller's
   --- State after the call [cycle 15, heap cycle 16].
-  op callRes : Outcome Int Out -> Configuration .
-  rl callRes(ret(V, SigmaR), A, Out2)    => res(V, restore(SigmaR, A), Out2) .
-  rl callRes(Sigma1, A, Out2)            => res(none, restore(Sigma1, A), Out2) .
-  rl callRes(raised(V, Sigma1), A, Out2)
-    => res(xraised(V, restore(Sigma1, A)), restore(Sigma1, A), Out2) .
-  op callF : ExpOut ExpList State Out -> Configuration .
-  op callExpGo : ArgsOut Value ExpList State Out -> Configuration .
- crl < callExp(F, EL), Sigma, Out > => callF(EO, EL, Sigma1, Out0)
-    if < F, Sigma, Out > => res(EO, Sigma1, Out0) .
-  rl callF(xraised(V, Sigma2), EL, Sigma1, Out0) => res(xraised(V, Sigma2), Sigma2, Out0) .
- crl callF(funcV(IL, Body, Cap), EL, Sigma1, Out0) => callExpGo(AO, funcV(IL, Body, Cap), EL, Sigma2, OutA)
-    if evalArgs(EL, nilVL, Sigma1, Out0) => resA(AO, Sigma2, OutA) .
- crl callExpGo(VL, funcV(IL, Body, Cap), EL, Sigma, OutA) => callRes(Outd, A, Out2)
-    if A := Sigma(cur) /\ < Body, enter(Sigma, funcV(IL, Body, Cap), VL), OutA > => < Outd, Out2 > .
-  rl callExpGo(xraised(V, Sigma2), FV, EL, Sigma, OutA) => res(xraised(V, Sigma2), Sigma2, OutA) .
+  op callRes : Outcome Int Out Kont -> Configuration .
+ rl callRes(ret(V, SigmaR), A, Out2, K) => res(V, restore(SigmaR, A), Out2, K) .
+ rl callRes(Sigma1, A, Out2, K) => res(none, restore(Sigma1, A), Out2, K) .
+ rl callRes(raised(V, Sigma1), A, Out2, K) => res(xraised(V, restore(Sigma1, A)), restore(Sigma1, A), Out2, K) .
+  op callF : ExpOut ExpList State Out Kont -> Configuration .
+  op callExpGo : ArgsOut Value ExpList State Out Kont -> Configuration .
+ rl < callExp(F, EL), Sigma, Out | K > => < F, Sigma, Out | kCallF(EL, K) > .
+ rl res(EO, Sigma1, Out0, kCallF(EL, K)) => callF(EO, EL, Sigma1, Out0, K) .
+ rl callF(xraised(V, Sigma2), EL, Sigma1, Out0, K) => res(xraised(V, Sigma2), Sigma2, Out0, K) .
+ rl callF(funcV(IL, Body, Cap), EL, Sigma1, Out0, K) => evalArgs(EL, nilVL, Sigma1, Out0, kCallExpGo(IL, Body, Cap, EL, K)) .
+ rl resA(AO, Sigma2, OutA, kCallExpGo(IL, Body, Cap, EL, K)) => callExpGo(AO, funcV(IL, Body, Cap), EL, Sigma2, OutA, K) .
+ crl callExpGo(VL, funcV(IL, Body, Cap), EL, Sigma, OutA, K) => < Body, enter(Sigma, funcV(IL, Body, Cap), VL), OutA | kCallRes(A, K) > if A := Sigma(cur) .
+ rl < Outd, Out2 | kCallRes(A, K) > => callRes(Outd, A, Out2, K) .
+ rl callExpGo(xraised(V, Sigma2), FV, EL, Sigma, OutA, K) => res(xraised(V, Sigma2), Sigma2, OutA, K) .
 
   --- callStmt: the value is discarded; a raise propagates as raised.
-  op callStmtRes : Outcome Int Out -> Configuration .
-  rl callStmtRes(Sigma1, A, Out2)            => < restore(Sigma1, A), Out2 > .
-  rl callStmtRes(ret(V, SigmaR), A, Out2)    => < restore(SigmaR, A), Out2 > .
-  rl callStmtRes(raised(V, Sigma1), A, Out2) => < raised(V, restore(Sigma1, A)), Out2 > .
-  op callStmtF : ExpOut ExpList State Out -> Configuration .
-  op callStmtGo : ArgsOut Value ExpList State Out -> Configuration .
- crl < callStmt(F, EL), Sigma, Out > => callStmtF(EO, EL, Sigma1, Out0)
-    if < F, Sigma, Out > => res(EO, Sigma1, Out0) .
-  rl callStmtF(xraised(V, Sigma2), EL, Sigma1, Out0) => < raised(V, Sigma2), Out0 > .
- crl callStmtF(funcV(IL, Body, Cap), EL, Sigma1, Out0) => callStmtGo(AO, funcV(IL, Body, Cap), EL, Sigma2, OutA)
-    if evalArgs(EL, nilVL, Sigma1, Out0) => resA(AO, Sigma2, OutA) .
- crl callStmtGo(VL, funcV(IL, Body, Cap), EL, Sigma, OutA) => callStmtRes(Outd, A, Out2)
-    if A := Sigma(cur) /\ < Body, enter(Sigma, funcV(IL, Body, Cap), VL), OutA > => < Outd, Out2 > .
-  rl callStmtGo(xraised(V, Sigma2), FV, EL, Sigma, OutA) => < raised(V, Sigma2), OutA > .
+  op callStmtRes : Outcome Int Out Kont -> Configuration .
+ rl callStmtRes(Sigma1, A, Out2, K) => < restore(Sigma1, A), Out2 | K > .
+ rl callStmtRes(ret(V, SigmaR), A, Out2, K) => < restore(SigmaR, A), Out2 | K > .
+ rl callStmtRes(raised(V, Sigma1), A, Out2, K) => < raised(V, restore(Sigma1, A)), Out2 | K > .
+  op callStmtF : ExpOut ExpList State Out Kont -> Configuration .
+  op callStmtGo : ArgsOut Value ExpList State Out Kont -> Configuration .
+ rl < callStmt(F, EL), Sigma, Out | K > => < F, Sigma, Out | kCallStmtF(EL, K) > .
+ rl res(EO, Sigma1, Out0, kCallStmtF(EL, K)) => callStmtF(EO, EL, Sigma1, Out0, K) .
+ rl callStmtF(xraised(V, Sigma2), EL, Sigma1, Out0, K) => < raised(V, Sigma2), Out0 | K > .
+ rl callStmtF(funcV(IL, Body, Cap), EL, Sigma1, Out0, K) => evalArgs(EL, nilVL, Sigma1, Out0, kCallStmtGo(IL, Body, Cap, EL, K)) .
+ rl resA(AO, Sigma2, OutA, kCallStmtGo(IL, Body, Cap, EL, K)) => callStmtGo(AO, funcV(IL, Body, Cap), EL, Sigma2, OutA, K) .
+ crl callStmtGo(VL, funcV(IL, Body, Cap), EL, Sigma, OutA, K) => < Body, enter(Sigma, funcV(IL, Body, Cap), VL), OutA | kCallStmtRes(A, K) > if A := Sigma(cur) .
+ rl < Outd, Out2 | kCallStmtRes(A, K) > => callStmtRes(Outd, A, Out2, K) .
+ rl callStmtGo(xraised(V, Sigma2), FV, EL, Sigma, OutA, K) => < raised(V, Sigma2), OutA | K > .
 
   --- ----- exceptions: raise / try-except ----------------
   --- raise e: evaluate e, propagate as raised[V, State at the raise] [cycle 13].
- crl < raise(E), Sigma, Out > => raiseK(EO, Sigma1, Out')
-    if < E, Sigma, Out > => res(EO, Sigma1, Out') .
-  op raiseK : ExpOut State Out -> Configuration .
-  rl raiseK(V, Sigma1, Out')                 => < raised(V, Sigma1), Out' > .
-  rl raiseK(xraised(V, Sigma2), Sigma1, Out') => < raised(V, Sigma2), Out' > .
+ rl < raise(E), Sigma, Out | K > => < E, Sigma, Out | kRaiseK(K) > .
+ rl res(EO, Sigma1, Out', kRaiseK(K)) => raiseK(EO, Sigma1, Out', K) .
+  op raiseK : ExpOut State Out Kont -> Configuration .
+ rl raiseK(V, Sigma1, Out', K) => < raised(V, Sigma1), Out' | K > .
+ rl raiseK(xraised(V, Sigma2), Sigma1, Out', K) => < raised(V, Sigma2), Out' | K > .
 
   --- try { body } except as x { handler }   [cycle 13: one rule]
   --- The body runs once.  Normal completion, ret, break and continue pass
   --- through untouched; a raise binds the exception to x and runs the
   --- handler in the State at the raise.
-  op tryK : Outcome Id Stmt Out -> Configuration .
- crl < tryexcept(Body, X, St1), Sigma, Out > => tryK(Outd, X, St1, Out1)
-    if < Body, Sigma, Out > => < Outd, Out1 > .
-  rl tryK(Sigma1, X, St1, Out1)      => < Sigma1, Out1 > .
-  rl tryK(ret(V, SigmaR), X, St1, Out1) => < ret(V, SigmaR), Out1 > .
-  rl tryK(brk(Sigma1), X, St1, Out1) => < brk(Sigma1), Out1 > .
-  rl tryK(cnt(Sigma1), X, St1, Out1) => < cnt(Sigma1), Out1 > .
+  op tryK : Outcome Id Stmt Out Kont -> Configuration .
+ rl < tryexcept(Body, X, St1), Sigma, Out | K > => < Body, Sigma, Out | kTryK(X, St1, K) > .
+ rl < Outd, Out1 | kTryK(X, St1, K) > => tryK(Outd, X, St1, Out1, K) .
+ rl tryK(Sigma1, X, St1, Out1, K) => < Sigma1, Out1 | K > .
+ rl tryK(ret(V, SigmaR), X, St1, Out1, K) => < ret(V, SigmaR), Out1 | K > .
+ rl tryK(brk(Sigma1), X, St1, Out1, K) => < brk(Sigma1), Out1 | K > .
+ rl tryK(cnt(Sigma1), X, St1, Out1, K) => < cnt(Sigma1), Out1 | K > .
   --- Cycle 18: like CPython, `except ... as x` deletes x when the handler ends [also when
   --- the handler returns, raises, breaks or continues], so a later read of x raises
   --- UnboundLocalError in a function and NameError at the top level.
- crl tryK(raised(V, Sigma1), X, St1, Out1) => hdlK(Outd, X, Out2)
-    if < St1, asgn(Sigma1, X, V), Out1 > => < Outd, Out2 > .
-  op hdlK : Outcome Id Out -> Configuration .
+ rl tryK(raised(V, Sigma1), X, St1, Out1, K) => < St1, asgn(Sigma1, X, V), Out1 | kHdlK(X, K) > .
+ rl < Outd, Out2 | kHdlK(X, K) > => hdlK(Outd, X, Out2, K) .
+  op hdlK : Outcome Id Out Kont -> Configuration .
   op delv : State Id -> State .
-  rl hdlK(Sigma1, X, Out1)            => < delv(Sigma1, X), Out1 > .
-  rl hdlK(ret(V, SigmaR), X, Out1)    => < ret(V, delv(SigmaR, X)), Out1 > .
-  rl hdlK(raised(V, Sigma1), X, Out1) => < raised(V, delv(Sigma1, X)), Out1 > .
-  rl hdlK(brk(Sigma1), X, Out1)       => < brk(delv(Sigma1, X)), Out1 > .
-  rl hdlK(cnt(Sigma1), X, Out1)       => < cnt(delv(Sigma1, X)), Out1 > .
+ rl hdlK(Sigma1, X, Out1, K) => < delv(Sigma1, X), Out1 | K > .
+ rl hdlK(ret(V, SigmaR), X, Out1, K) => < ret(V, delv(SigmaR, X)), Out1 | K > .
+ rl hdlK(raised(V, Sigma1), X, Out1, K) => < raised(V, delv(Sigma1, X)), Out1 | K > .
+ rl hdlK(brk(Sigma1), X, Out1, K) => < brk(delv(Sigma1, X)), Out1 | K > .
+ rl hdlK(cnt(Sigma1), X, Out1, K) => < cnt(delv(Sigma1, X)), Out1 | K > .
  ceq delv(Sigma, X) = Sd if A := Sigma(cur) /\ (cell(A, X) |-> Vd2 & Sd) := Sigma .
   eq delv(Sigma, X) = Sigma [owise] .
 
   --- ----- tuples [cycle 8] ----------------------------------
   --- tupLit(...) - same eval as listLit but wraps in tupV instead of listV.
-  op tupK : ListOut State Out -> Configuration .
- crl < tupLit(EL), Sigma, Out > => tupK(LO, Sigma1, Out1)
-   if evalElts(EL, nil, Sigma, Out) => resL(LO, Sigma1, Out1) .
-  rl tupK(L, Sigma1, Out1) => res(tupV(L), Sigma1, Out1) .
-  rl tupK(xraised(V, Sigma2), Sigma1, Out1) => res(xraised(V, Sigma2), Sigma2, Out1) .
+  op tupK : ListOut State Out Kont -> Configuration .
+ rl < tupLit(EL), Sigma, Out | K > => evalElts(EL, nil, Sigma, Out, kTupK(K)) .
+ rl resL(LO, Sigma1, Out1, kTupK(K)) => tupK(LO, Sigma1, Out1, K) .
+ rl tupK(L, Sigma1, Out1, K) => res(tupV(L), Sigma1, Out1, K) .
+ rl tupK(xraised(V, Sigma2), Sigma1, Out1, K) => res(xraised(V, Sigma2), Sigma2, Out1, K) .
 
   --- Cycle 18: tuple `+` and `*` build a new tuple [tuples are immutable, so `t += u` and
   --- `t *= n` rebind t].
- rl bin(oPlus, tupV(L1), tupV(L2), Sigma, Out2) => res(tupV(lstConcat(L1, L2)), Sigma, Out2) .
- rl bin(oTimes, tupV(L1), I2, Sigma, Out2) => res(tupV(lstRep(L1, I2)), Sigma, Out2) .
- rl bin(oTimes, I1, tupV(L2), Sigma, Out2) => res(tupV(lstRep(L2, I1)), Sigma, Out2) .
- crl bin(oIdx, tupV(L), I, Sigma, Out2) => res(lstIdx(L, I +Int lstLen(L)), Sigma, Out2)
-   if I <Int 0
-   /\ I +Int lstLen(L) >=Int 0 .
+ rl bin(oPlus, tupV(L1), tupV(L2), Sigma, Out2, K) => res(tupV(lstConcat(L1, L2)), Sigma, Out2, K) .
+ rl bin(oTimes, tupV(L1), I2, Sigma, Out2, K) => res(tupV(lstRep(L1, I2)), Sigma, Out2, K) .
+ rl bin(oTimes, I1, tupV(L2), Sigma, Out2, K) => res(tupV(lstRep(L2, I1)), Sigma, Out2, K) .
+ crl bin(oIdx, tupV(L), I, Sigma, Out2, K) => res(lstIdx(L, I +Int lstLen(L)), Sigma, Out2, K) if I <Int 0 /\ I +Int lstLen(L) >=Int 0 .
 
   --- len(t) for tuples [shares lstLen with lists].
- rl un(oLen, tupV(L), Sigma, Out') => res(lstLen(L), Sigma, Out') .
+ rl un(oLen, tupV(L), Sigma, Out', K) => res(lstLen(L), Sigma, Out', K) .
 
   --- t ! i  for tuples [same indexing op as lists].
- crl bin(oIdx, tupV(L), I, Sigma, Out2) => res(lstIdx(L, I), Sigma, Out2)
-   if I >=Int 0
-   /\ I <Int lstLen(L) .
+ crl bin(oIdx, tupV(L), I, Sigma, Out2, K) => res(lstIdx(L, I), Sigma, Out2, K) if I >=Int 0 /\ I <Int lstLen(L) .
 
   --- Multi-assignment: a, b, ... = e   where e -> tupV(L) or a ref to a list.
   --- Bind each id in IdList to the corresponding element of L; arity
@@ -882,33 +930,29 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   eq spreadAssign(Sigma, consI(Xs, ILs), cons(Vs, Ls))
     = spreadAssign(asgn(Sigma, Xs, Vs), ILs, Ls) .
 
- crl < multiAssign(IL, E), Sigma, Out > => maK(EO, IL, Sigma1, Out')
-    if < E, Sigma, Out > => res(EO, Sigma1, Out') .
-  op maK : ExpOut IdList State Out -> Configuration .
-  rl maK(tupV(L), IL, Sigma1, Out')  => < spreadAssign(Sigma1, IL, L), Out' > .
-  crl maK(ref(N), IL, Sigma1, Out') => < spreadAssign(Sigma1, IL, L), Out' >
-    if listV(L) := hget(Sigma1, N) .
-  rl maK(xraised(V, Sigma2), IL, Sigma1, Out') => < raised(V, Sigma2), Out' > .
+ rl < multiAssign(IL, E), Sigma, Out | K > => < E, Sigma, Out | kMaK(IL, K) > .
+ rl res(EO, Sigma1, Out', kMaK(IL, K)) => maK(EO, IL, Sigma1, Out', K) .
+  op maK : ExpOut IdList State Out Kont -> Configuration .
+ rl maK(tupV(L), IL, Sigma1, Out', K) => < spreadAssign(Sigma1, IL, L), Out' | K > .
+ crl maK(ref(N), IL, Sigma1, Out', K) => < spreadAssign(Sigma1, IL, L), Out' | K > if listV(L) := hget(Sigma1, N) .
+ rl maK(xraised(V, Sigma2), IL, Sigma1, Out', K) => < raised(V, Sigma2), Out' | K > .
 
   --- ----- lambda [cycle 10] --------------------------------
   --- lambdaExp(params, body)  evaluates to funcV(params, return(body), cap)
   --- where cap names the defining activation and a fresh function identity.
- crl < lambdaExp(IL, E), Sigma, Out > => res(funcV(IL, return(E), capOf(Sigma) & (fid |-> N)), mark(Sigma[(N +Int 1) / nxtC]), Out)
-   if N := Sigma(nxtC) .
+ crl < lambdaExp(IL, E), Sigma, Out | K > => res(funcV(IL, return(E), capOf(Sigma) & (fid |-> N)), mark(Sigma[(N +Int 1) / nxtC]), Out, K) if N := Sigma(nxtC) .
 
   --- Conditional expression  a if c else b  [cycle 18]: c is evaluated once, then only the
   --- chosen branch; a raise in c propagates.
-  op ifeK : ExpOut Exp Exp State Out -> Configuration .
- crl < ifExp(E, E1, E2), Sigma, Out > => ifeK(EO, E1, E2, Sigma1, Out1)
-    if < E, Sigma, Out > => res(EO, Sigma1, Out1) .
- crl ifeK(V, E1, E2, Sigma1, Out1) => < E1, Sigma1, Out1 >
-    if truthy(deref(Sigma1, V)) ==Bool true .
- crl ifeK(V, E1, E2, Sigma1, Out1) => < E2, Sigma1, Out1 >
-    if truthy(deref(Sigma1, V)) ==Bool false .
-  rl ifeK(xraised(V, Sigma2), E1, E2, Sigma1, Out1) => res(xraised(V, Sigma2), Sigma2, Out1) .
+  op ifeK : ExpOut Exp Exp State Out Kont -> Configuration .
+ rl < ifExp(E, E1, E2), Sigma, Out | K > => < E, Sigma, Out | kIfeK(E1, E2, K) > .
+ rl res(EO, Sigma1, Out1, kIfeK(E1, E2, K)) => ifeK(EO, E1, E2, Sigma1, Out1, K) .
+ crl ifeK(V, E1, E2, Sigma1, Out1, K) => < E1, Sigma1, Out1 | K > if truthy(deref(Sigma1, V)) ==Bool true .
+ crl ifeK(V, E1, E2, Sigma1, Out1, K) => < E2, Sigma1, Out1 | K > if truthy(deref(Sigma1, V)) ==Bool false .
+ rl ifeK(xraised(V, Sigma2), E1, E2, Sigma1, Out1, K) => res(xraised(V, Sigma2), Sigma2, Out1, K) .
 
   --- None literal evaluates to the none value.
- rl < noneE, Sigma, Out > => res(none, Sigma, Out) .
+ rl < noneE, Sigma, Out | K > => res(none, Sigma, Out, K) .
 
   --- ----- slicing [cycle 11] -------------------------------
   --- xs[a:b]  with  a, b  either Int or none.  Negative indices are
@@ -933,92 +977,81 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   eq clampSliceStop(none, Nh) = Nh .
   eq clampSliceStop(Ih, Nh) = normIdx(Ih, Nh) .
 
-  op sl1 : ExpOut Exp Exp Exp State Out -> Configuration .
-  op sl2 : Value ExpOut Exp Exp State Out -> Configuration .
-  op sl3 : Value Value ExpOut Exp State Out -> Configuration .
-  op sl4 : Value Value Value ExpOut State Out -> Configuration .
-  op sliceDo : Value Value Value State Out -> Configuration .
- crl < slice3(E0, Ea, Eb, Es), Sigma, Out > => sl1(EO, Ea, Eb, Es, Sigma1, Out1)
-    if < E0, Sigma, Out > => res(EO, Sigma1, Out1) .
-  rl sl1(xraised(V, Sigma2), Ea, Eb, Es, Sigma1, Out1) => res(xraised(V, Sigma2), Sigma2, Out1) .
- crl sl1(V, Ea, Eb, Es, Sigma1, Out1) => sl2(V, EOa, Eb, Es, Sigma2, Out2)
-    if < Ea, Sigma1, Out1 > => res(EOa, Sigma2, Out2) .
-  rl sl2(V, xraised(V2, Sigma3), Eb, Es, Sigma2, Out2) => res(xraised(V2, Sigma3), Sigma3, Out2) .
- crl sl2(V, Va, Eb, Es, Sigma2, Out2) => sl3(V, Va, EOb, Es, Sigma3, Out3)
-    if < Eb, Sigma2, Out2 > => res(EOb, Sigma3, Out3) .
-  rl sl3(V, Va, xraised(V2, Sigma4), Es, Sigma3, Out3) => res(xraised(V2, Sigma4), Sigma4, Out3) .
- crl sl3(V, Va, Vb, Es, Sigma3, Out3) => sl4(V, Va, Vb, EOs, Sigma4, Out4)
-    if < Es, Sigma3, Out3 > => res(EOs, Sigma4, Out4) .
-  rl sl4(V, Va, Vb, xraised(V2, Sigma5), Sigma4, Out4) => res(xraised(V2, Sigma5), Sigma5, Out4) .
-  rl sl4(V, Va, Vb, Vs, Sigma4, Out4) => sliceDo(deref(Sigma4, V), Va, Vb, Sigma4, Out4) .
-  vars Sigma5 : State .
+  op sl1 : ExpOut Exp Exp Exp State Out Kont -> Configuration .
+  op sl2 : Value ExpOut Exp Exp State Out Kont -> Configuration .
+  op sl3 : Value Value ExpOut Exp State Out Kont -> Configuration .
+  op sl4 : Value Value Value ExpOut State Out Kont -> Configuration .
+  op sliceDo : Value Value Value State Out Kont -> Configuration .
+ rl < slice3(E0, Ea, Eb, Es), Sigma, Out | K > => < E0, Sigma, Out | kSl1(Ea, Eb, Es, K) > .
+ rl res(EO, Sigma1, Out1, kSl1(Ea, Eb, Es, K)) => sl1(EO, Ea, Eb, Es, Sigma1, Out1, K) .
+ rl sl1(xraised(V, Sigma2), Ea, Eb, Es, Sigma1, Out1, K) => res(xraised(V, Sigma2), Sigma2, Out1, K) .
+ rl sl1(V, Ea, Eb, Es, Sigma1, Out1, K) => < Ea, Sigma1, Out1 | kSl2(V, Eb, Es, K) > .
+ rl res(EOa, Sigma2, Out2, kSl2(V, Eb, Es, K)) => sl2(V, EOa, Eb, Es, Sigma2, Out2, K) .
+ rl sl2(V, xraised(V2, Sigma3), Eb, Es, Sigma2, Out2, K) => res(xraised(V2, Sigma3), Sigma3, Out2, K) .
+ rl sl2(V, Va, Eb, Es, Sigma2, Out2, K) => < Eb, Sigma2, Out2 | kSl3(V, Va, Es, K) > .
+ rl res(EOb, Sigma3, Out3, kSl3(V, Va, Es, K)) => sl3(V, Va, EOb, Es, Sigma3, Out3, K) .
+ rl sl3(V, Va, xraised(V2, Sigma4), Es, Sigma3, Out3, K) => res(xraised(V2, Sigma4), Sigma4, Out3, K) .
+ rl sl3(V, Va, Vb, Es, Sigma3, Out3, K) => < Es, Sigma3, Out3 | kSl4(V, Va, Vb, K) > .
+ rl res(EOs, Sigma4, Out4, kSl4(V, Va, Vb, K)) => sl4(V, Va, Vb, EOs, Sigma4, Out4, K) .
+ rl sl4(V, Va, Vb, xraised(V2, Sigma5), Sigma4, Out4, K) => res(xraised(V2, Sigma5), Sigma5, Out4, K) .
+ rl sl4(V, Va, Vb, Vs, Sigma4, Out4, K) => sliceDo(deref(Sigma4, V), Va, Vb, Sigma4, Out4, K) .
+  vars Sigma5 Sigma2b : State .  var Out2b : Out .
 
   --- Slice on list.
- crl sliceDo(listV(L), Va, Vb, Sigma, Out) => alloc(listV(lstSlice(L, Sa, Sb)), Sigma, Out)
-   if Sa := clampSliceStart(Va, lstLen(L))
-   /\ Sb := clampSliceStop(Vb, lstLen(L)) .
+ crl sliceDo(listV(L), Va, Vb, Sigma, Out, K) => alloc(listV(lstSlice(L, Sa, Sb)), Sigma, Out, K) if Sa := clampSliceStart(Va, lstLen(L)) /\ Sb := clampSliceStop(Vb, lstLen(L)) .
   --- [step Es is ignored in v1; only the no-step / step-1 case is correct]
 
   --- Slice on tuple.
- crl sliceDo(tupV(L), Va, Vb, Sigma, Out) => res(tupV(lstSlice(L, Sa, Sb)), Sigma, Out)
-   if Sa := clampSliceStart(Va, lstLen(L))
-   /\ Sb := clampSliceStop(Vb, lstLen(L)) .
+ crl sliceDo(tupV(L), Va, Vb, Sigma, Out, K) => res(tupV(lstSlice(L, Sa, Sb)), Sigma, Out, K) if Sa := clampSliceStart(Va, lstLen(L)) /\ Sb := clampSliceStop(Vb, lstLen(L)) .
 
   --- Slice on string.
- crl sliceDo(S, Va, Vb, Sigma, Out) => res(substr(S, Sa, maxInt(Sb -Int Sa, 0)), Sigma, Out)
-   if Sa := clampSliceStart(Va, length(S))
-   /\ Sb := clampSliceStop(Vb, length(S)) .
+ crl sliceDo(S, Va, Vb, Sigma, Out, K) => res(substr(S, Sa, maxInt(Sb -Int Sa, 0)), Sigma, Out, K) if Sa := clampSliceStart(Va, length(S)) /\ Sb := clampSliceStop(Vb, length(S)) .
 
   --- String indexing s[i] returns a 1-character string (CPython).
- crl bin(oIdx, S, Ih, Sigma, Out2) => res(substr(S, Sa, 1), Sigma, Out2)
-   if Sa := normIdx(Ih, length(S)) .
+ crl bin(oIdx, S, Ih, Sigma, Out2, K) => res(substr(S, Sa, 1), Sigma, Out2, K) if Sa := normIdx(Ih, length(S)) .
 
   --- ----- dicts [cycle 9] ----------------------------------
   --- dict literal: evaluate keys and values left-to-right; a raise in any of
   --- them propagates [cycle 15]; the State threads.
-  op evalDEntries : DictEntries State Out -> Configuration .
-  op dk1 : ExpOut Exp DictEntries State Out -> Configuration .
-  op dk2 : Value ExpOut DictEntries State Out -> Configuration .
-  op dk3 : Value Value DictOut State Out -> Configuration .
-  op dlitK : DictOut State Out -> Configuration .
+  op evalDEntries : DictEntries State Out Kont -> Configuration .
+  op dk1 : ExpOut Exp DictEntries State Out Kont -> Configuration .
+  op dk2 : Value ExpOut DictEntries State Out Kont -> Configuration .
+  op dk3 : Value Value DictOut State Out Kont -> Configuration .
+  op dlitK : DictOut State Out Kont -> Configuration .
   vars DE : DictEntries .
   vars Vk Vd : Value .
-   rl evalDEntries(nilDE, Sigma, Out) => resD(nilD, Sigma, Out) .
-  crl evalDEntries(consDE(E1, E2, DE), Sigma, Out) => dk1(EO1, E2, DE, Sigma1, Out1)
-    if < E1, Sigma, Out > => res(EO1, Sigma1, Out1) .
-   rl dk1(xraised(V, Sigma2), E2, DE, Sigma1, Out1) => resD(xraised(V, Sigma2), Sigma2, Out1) .
-  crl dk1(Vk, E2, DE, Sigma1, Out1) => dk2(Vk, EO2, DE, Sigma2, Out2)
-    if < E2, Sigma1, Out1 > => res(EO2, Sigma2, Out2) .
-   rl dk2(Vk, xraised(V, Sigma3), DE, Sigma2, Out2) => resD(xraised(V, Sigma3), Sigma3, Out2) .
-  crl dk2(Vk, Vd, DE, Sigma2, Out2) => dk3(Vk, Vd, DO, Sigma3, Out3)
-    if evalDEntries(DE, Sigma2, Out2) => resD(DO, Sigma3, Out3) .
+ rl evalDEntries(nilDE, Sigma, Out, K) => resD(nilD, Sigma, Out, K) .
+ rl evalDEntries(consDE(E1, E2, DE), Sigma, Out, K) => < E1, Sigma, Out | kDk1(E2, DE, K) > .
+ rl res(EO1, Sigma1, Out1, kDk1(E2, DE, K)) => dk1(EO1, E2, DE, Sigma1, Out1, K) .
+ rl dk1(xraised(V, Sigma2), E2, DE, Sigma1, Out1, K) => resD(xraised(V, Sigma2), Sigma2, Out1, K) .
+ rl dk1(Vk, E2, DE, Sigma1, Out1, K) => < E2, Sigma1, Out1 | kDk2(Vk, DE, K) > .
+ rl res(EO2, Sigma2, Out2, kDk2(Vk, DE, K)) => dk2(Vk, EO2, DE, Sigma2, Out2, K) .
+ rl dk2(Vk, xraised(V, Sigma3), DE, Sigma2, Out2, K) => resD(xraised(V, Sigma3), Sigma3, Out2, K) .
+ rl dk2(Vk, Vd, DE, Sigma2, Out2, K) => evalDEntries(DE, Sigma2, Out2, kDk3(Vk, Vd, K)) .
+ rl resD(DO, Sigma3, Out3, kDk3(Vk, Vd, K)) => dk3(Vk, Vd, DO, Sigma3, Out3, K) .
   --- a duplicate key keeps the later entry (the rest D is the later entries) [cycle 15 QA]
-  crl dk3(Vk, Vd, D, Sigma3, Out3) => resD(if dictHas(D, Vk) then D else consD(Vk, Vd, D) fi, Sigma3, Out3) if true .
-   rl dk3(Vk, Vd, xraised(V, Sigma4), Sigma3, Out3) => resD(xraised(V, Sigma4), Sigma4, Out3) .
+ crl dk3(Vk, Vd, D, Sigma3, Out3, K) => resD(if dictHas(D, Vk) then D else consD(Vk, Vd, D) fi, Sigma3, Out3, K) if true .
+ rl dk3(Vk, Vd, xraised(V, Sigma4), Sigma3, Out3, K) => resD(xraised(V, Sigma4), Sigma4, Out3, K) .
 
- crl < dictLit(DE), Sigma, Out > => dlitK(DO, Sigma1, Out1)
-   if evalDEntries(DE, Sigma, Out) => resD(DO, Sigma1, Out1) .
-  rl dlitK(D, Sigma1, Out1) => alloc(dictV(D), Sigma1, Out1) .
-  rl dlitK(xraised(V, Sigma2), Sigma1, Out1) => res(xraised(V, Sigma2), Sigma2, Out1) .
+ rl < dictLit(DE), Sigma, Out | K > => evalDEntries(DE, Sigma, Out, kDlitK(K)) .
+ rl resD(DO, Sigma1, Out1, kDlitK(K)) => dlitK(DO, Sigma1, Out1, K) .
+ rl dlitK(D, Sigma1, Out1, K) => alloc(dictV(D), Sigma1, Out1, K) .
+ rl dlitK(xraised(V, Sigma2), Sigma1, Out1, K) => res(xraised(V, Sigma2), Sigma2, Out1, K) .
 
   --- dict subscript get: d ! k.
- rl bin(oIdx, dictV(D), Vk, Sigma, Out2) => res(dictGet(D, Vk), Sigma, Out2) .
+ rl bin(oIdx, dictV(D), Vk, Sigma, Out2, K) => res(dictGet(D, Vk), Sigma, Out2, K) .
 
   --- dict subscript set: d[k] = v is the ix1 / ix2 / ix3 chain above.
 
   --- len(d) for dicts.
- rl un(oLen, dictV(D), Sigma, Out') => res(dictLen(D), Sigma, Out') .
+ rl un(oLen, dictV(D), Sigma, Out', K) => res(dictLen(D), Sigma, Out', K) .
 
   --- k in d  membership check [dict only - list/string `in` future].
- rl bin(oIn, Vk, dictV(D), Sigma, Out2) => res(dictHas(D, Vk), Sigma, Out2) .
+ rl bin(oIn, Vk, dictV(D), Sigma, Out2, K) => res(dictHas(D, Vk), Sigma, Out2, K) .
 
   --- ----- whole-program kickoff -----------------------------
   --- The program may end either with a State or with a ret[V] [if
   --- the program has a top-level return].  Both are Outcome.
-  rl < St > => < St, initS, .Out > .   --- normal completion
- crl < St > => < .State, Out >
-   if < St, initS, .Out > => < ret(V, SigmaR), Out > .      --- top-level return; we
-                                                     --- discard the returned
-                                                     --- value [Python's main
-                                                     --- shouldn't return non-None].
+  rl < St > => < St, initS, .Out | halt > .
+  rl < Outd, Out1 | halt > => < Outd, Out1 > .
 endm
