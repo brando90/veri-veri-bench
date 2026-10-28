@@ -30,8 +30,9 @@ mod PL-STRING is
     op-hook stringSymbol (<Strings> : ~> String)
     op-hook succSymbol (sInt_ : Int ~> Int))] .
 
-  --- Cycle 19: lexicographic order by character code, Maude's own string comparison
-  --- [CPython compares by code point; the two agree on ASCII].
+  --- Cycle 19: lexicographic order by character code, Maude's own string comparison.  CPython compares
+  --- by code point; the two agree on ASCII [Maude compares bytes as signed chars, so non-ASCII
+  --- text sorts before ASCII; pythonlite programs are ASCII].
   op _<String_ : String String -> Bool [prec 37 special (
     id-hook StringOpSymbol (<)
     op-hook stringSymbol (<Strings> : ~> String)

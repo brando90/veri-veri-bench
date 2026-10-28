@@ -1,0 +1,5 @@
+print("\n" < " ")
+print("\t" < "\n")
+print("\\" > "Z")
+print("\"" < "#")
+print("a\nb" < "a b")

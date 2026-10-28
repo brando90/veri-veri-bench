@@ -1,0 +1,5 @@
+print("Z" < "a")
+print("a" < "B")
+print("abc" < "abD")
+print("Apple" < "apple")
+print("zzz" > "ZZZZ")

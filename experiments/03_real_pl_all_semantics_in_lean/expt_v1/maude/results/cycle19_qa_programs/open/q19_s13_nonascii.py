@@ -1,0 +1,5 @@
+print("é" < "z")
+print("€" > "é")
+print("ab" < "aé")
+print("Ω" >= "ω")
+print("日本" < "日")

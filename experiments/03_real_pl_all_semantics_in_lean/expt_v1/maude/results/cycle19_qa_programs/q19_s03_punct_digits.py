@@ -1,0 +1,7 @@
+print("!" < "0")
+print("9" < "A")
+print(" " < "!")
+print("10" < "9")
+print("a-b" < "a_b")
+print("~" > "z")
+print("a b" < "ab")

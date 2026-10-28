@@ -446,7 +446,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   eq ng(oNeg, V) = nb(V) .
   eq ng(OP, V) = V [owise] .
   vars Kc1 Kc2 Vc1 Vc2 : Value .  vars Dc : DictObj .  vars Lc1 Lc2 : ListObj .  vars Ic1 Ic2 : Int .
-  vars Sc1 Sc2 : String .
+  vars Sc1 Sc2 : String .  vars ILc1 ILc2 : IdList .  vars Bc1 Bc2 : Stmt .  vars Cc1 Cc2 : State .
   op canon : Value -> Value .
   op canonL : ListObj -> ListObj .
   op canonD : DictObj -> DictObj .
@@ -475,6 +475,9 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   eq keyLt(Ic1, Ic2) = Ic1 <Int Ic2 .
   eq keyLt(Sc1, Sc2) = Sc1 <String Sc2 .
   eq keyLt(tupV(Lc1), tupV(Lc2)) = lstLt(Lc1, Lc2) .
+  --- two functions: by their unique id [fid] (the order is arbitrary, it only has to be total)
+ ceq keyLt(funcV(ILc1, Bc1, Cc1), funcV(ILc2, Bc2, Cc2)) = Ic1 <Int Ic2
+   if Ic1 := Cc1(fid) /\ Ic2 := Cc2(fid) .
   eq keyLt(Kc1, Kc2) = rk(Kc1) <Int rk(Kc2) [owise] .
   eq lstLt(nil, nil) = false .
   eq lstLt(nil, cons(Vc1, Lc2)) = true .
@@ -753,6 +756,9 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  crl sa4(ref(N), Bq, V, Sigma4, Out4, K) => sa4(ref(N), nb(Bq), V, Sigma4, Out4, K) if listV(L) := hget(Sigma4, N) .
   --- cycle 19: a tuple or string item cannot be assigned: t[0] += x raises TypeError, after the
   --- list inside was extended in place [CPython]
+  --- the list may have shrunk while e ran [xs[2] += f() where f empties xs]
+ crl sa4(ref(N), I, V, Sigma4, Out4, K) => < raised("IndexError", Sigma4), Out4 | K > if listV(L) := hget(Sigma4, N) /\ I >=Int lstLen(L) .
+ crl sa4(ref(N), I, V, Sigma4, Out4, K) => < raised("IndexError", Sigma4), Out4 | K > if listV(L) := hget(Sigma4, N) /\ I <Int 0 /\ I +Int lstLen(L) <Int 0 .
  rl sa4(tupV(L), V2, V, Sigma4, Out4, K) => < raised("TypeError", Sigma4), Out4 | K > .
  rl sa4(S1, V2, V, Sigma4, Out4, K) => < raised("TypeError", Sigma4), Out4 | K > .
 
@@ -1035,6 +1041,10 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  ceq normIdx(Ih, Nh) = Nh               if Ih >=Int 0 /\ Ih >Int Nh .
  ceq normIdx(Ih, Nh) = Ih               if Ih >=Int 0 /\ Ih <=Int Nh .
   eq clampSliceStart(none, Nh) = 0 .
+  eq clampSliceStart(true, Nh) = normIdx(1, Nh) .   --- cycle 19: a bool bound is its int
+  eq clampSliceStart(false, Nh) = 0 .
+  eq clampSliceStop(true, Nh) = normIdx(1, Nh) .
+  eq clampSliceStop(false, Nh) = 0 .
   eq clampSliceStart(Ih, Nh) = normIdx(Ih, Nh) .
   eq clampSliceStop(none, Nh) = Nh .
   eq clampSliceStop(Ih, Nh) = normIdx(Ih, Nh) .

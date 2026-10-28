@@ -1,0 +1,7 @@
+print({1: "a", True: "b"})
+print({True: "a", 1: "b"})
+print(len({0: 1, False: 2}))
+print({1: "a", 2: "b", True: "c", 2: "d"})
+print({True: "x", 1: "y", True: "z"})
+print({0: 1, False: 2, 1: 3})
+print({(1,): 1, (True,): 2})
