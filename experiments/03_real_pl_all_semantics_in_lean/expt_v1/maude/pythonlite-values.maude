@@ -63,21 +63,41 @@ mod PYTHONLITE-VALUES is
   eq dictLen(nilD) = 0 .
   eq dictLen(consD(Kh, Vh2, Dh)) = 1 +Int dictLen(Dh) .
 
+  --- Cycle 19: dict keys are compared the way CPython hashes them: True is 1 and False is 0
+  --- [also inside tuple keys], so {1: 'a'}[True] is 'a'.  kn(K) is the key a key stands for.
+  op kn : Value -> Value .
+  op knL : ListObj -> ListObj .
+  eq kn(true) = 1 .
+  eq kn(false) = 0 .
+  eq kn(tupV(Lh)) = tupV(knL(Lh)) .
+  eq kn(Kh) = Kh [owise] .
+  eq knL(nil) = nil .
+  eq knL(cons(Kh, Lh)) = cons(kn(Kh), knL(Lh)) .
+  op keq : Value Value -> Bool .
+  eq keq(Kh, Vh) = kn(Kh) ==Bool kn(Vh) .
+
   op dictGet : DictObj Value -> Value .
   eq dictGet(nilD, Kh) = none .
- ceq dictGet(consD(Kh, Vh2, Dh), Vh) = Vh2 if Kh ==Bool Vh .
- ceq dictGet(consD(Kh, Vh2, Dh), Vh) = dictGet(Dh, Vh) if Kh =/=Bool Vh .
+ ceq dictGet(consD(Kh, Vh2, Dh), Vh) = Vh2 if keq(Kh, Vh) .
+ ceq dictGet(consD(Kh, Vh2, Dh), Vh) = dictGet(Dh, Vh) if notBool keq(Kh, Vh) .
 
   op dictSet : DictObj Value Value -> DictObj .
   eq dictSet(nilD, Kh, Vh2) = consD(Kh, Vh2, nilD) .
- ceq dictSet(consD(Kh, Vh, Dh), Vh2, Vha) = consD(Kh, Vha, Dh) if Kh ==Bool Vh2 .
+ ceq dictSet(consD(Kh, Vh, Dh), Vh2, Vha) = consD(Kh, Vha, Dh) if keq(Kh, Vh2) .
  ceq dictSet(consD(Kh, Vh, Dh), Vh2, Vha) = consD(Kh, Vh, dictSet(Dh, Vh2, Vha))
-   if Kh =/=Bool Vh2 .
+   if notBool keq(Kh, Vh2) .
 
   op dictHas : DictObj Value -> Bool .
   eq dictHas(nilD, Kh) = false .
- ceq dictHas(consD(Kh, Vh2, Dh), Vh) = true            if Kh ==Bool Vh .
- ceq dictHas(consD(Kh, Vh2, Dh), Vh) = dictHas(Dh, Vh) if Kh =/=Bool Vh .
+ ceq dictHas(consD(Kh, Vh2, Dh), Vh) = true            if keq(Kh, Vh) .
+ ceq dictHas(consD(Kh, Vh2, Dh), Vh) = dictHas(Dh, Vh) if notBool keq(Kh, Vh) .
+
+  --- dictDel(D, K): D without the entry whose key equals K.  A later duplicate key in a dict
+  --- literal ({1: 'a', True: 'b'}) keeps the FIRST key and position and the LAST value.
+  op dictDel : DictObj Value -> DictObj .
+  eq dictDel(nilD, Kh) = nilD .
+ ceq dictDel(consD(Kh, Vh2, Dh), Vh) = Dh if keq(Kh, Vh) .
+ ceq dictDel(consD(Kh, Vh2, Dh), Vh) = consD(Kh, Vh2, dictDel(Dh, Vh)) if notBool keq(Kh, Vh) .
 
   vars Vh Vha : Value .   vars Lh L1h L2h : ListObj .   vars Ih Ih2 : Int .
 
