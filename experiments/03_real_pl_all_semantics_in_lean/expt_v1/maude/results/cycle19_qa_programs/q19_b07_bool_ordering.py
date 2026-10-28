@@ -1,0 +1,8 @@
+print(True < 2)
+print(False < True)
+print(True >= 1)
+print(True > 0)
+print(False <= 0)
+print(-True < 0)
+print(2 > True)
+print(True > True)

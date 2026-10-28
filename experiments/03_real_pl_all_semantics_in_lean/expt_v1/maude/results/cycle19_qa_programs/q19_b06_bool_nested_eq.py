@@ -1,0 +1,7 @@
+print([True] == [1])
+print((True, False) == (1, 0))
+print([[True]] == [[1]])
+print({"a": True} == {"a": 1})
+print({True: 1} == {1: True})
+print([True, 2] != [1, 2])
+print((0,) == (False,))

@@ -1,0 +1,6 @@
+print(True)
+print(False)
+print([True, 1, False])
+print((False,))
+print({True: False})
+print((True, [False, None]))

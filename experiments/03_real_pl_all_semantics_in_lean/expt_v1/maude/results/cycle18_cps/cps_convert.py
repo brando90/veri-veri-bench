@@ -6,7 +6,7 @@ Usage: python3 cps_convert.py pythonlite-bigstep-direct.maude pythonlite-bigstep
 Every rule with one rewrite condition (L => R) becomes a push rule [evaluate L with a new frame on
 the continuation] and a pop rule [R with that frame on top continues]; a rule with no rewrite
 condition just carries the continuation K.  The frame holds the variables the rest of the rule
-needs.  The one rule with two conditions (sa2) is split in the source first.  The result is the
+needs.  Every rule has at most one rewrite condition [the direct-style source keeps it that way].  The result is the
 file the semantics runs from; the direct-style file is the readable big-step spec.
 """
 import re, sys
@@ -14,19 +14,8 @@ import re, sys
 src = open(sys.argv[1]).read()
 out_path = sys.argv[2]
 
-# ---- 1. split sa2 (two rewrite conditions) -------------------------------------------
-old_sa2 = """ crl sa2(AOo, V1, V2, E2, Sigma2, Out2) => sa3(AOo, V1, V2, Vrp, EO, Sigma3, Out3)
-   if b2(oIdx, V1, V2, Sigma2, Out2) => res(Vrp, Sigma2, Out2)
-   /\\ < E2, Sigma2, Out2 > => res(EO, Sigma3, Out3) ."""
-new_sa2 = """ crl sa2(AOo, V1, V2, E2, Sigma2, Out2) => sa2b(AOo, V1, V2, Vrp, E2, Sigma2b, Out2b)
-   if b2(oIdx, V1, V2, Sigma2, Out2) => res(Vrp, Sigma2b, Out2b) .
- crl sa2b(AOo, V1, V2, Vrp, E2, Sigma2, Out2) => sa3(AOo, V1, V2, Vrp, EO, Sigma3, Out3)
-   if < E2, Sigma2, Out2 > => res(EO, Sigma3, Out3) ."""
-assert old_sa2 in src
-src = src.replace(old_sa2, new_sa2)
-src = src.replace("  op sa3 : AugOp Value Value Value ExpOut State Out -> Configuration .",
-  "  op sa2b : AugOp Value Value Value Exp State Out -> Configuration .\n  op sa3 : AugOp Value Value Value ExpOut State Out -> Configuration .")
-src = src.replace("vars Sigma5 : State .", "vars Sigma5 Sigma2b : State .  var Out2b : Out .")
+# ---- 1. (cycle 18 split the rule sa2 with two rewrite conditions here; since cycle 19 the direct-style
+#         file has none, sa2 / sa2b is one condition each)
 
 kick_a = src.index("  rl < St > => < St, initS, .Out > .")
 kick_b = src.index("endm", kick_a)

@@ -1,0 +1,5 @@
+print(True in {1: "a"})
+print(1 in {True: "a"})
+print(0 in {False: 1})
+print(2 in {True: 1})
+print((1, 0) in {(True, False): 1})

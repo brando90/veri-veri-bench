@@ -432,10 +432,63 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  rl res(EO2, Sigma2, Out2, kB2(OP, V1, K)) => b2(OP, V1, EO2, Sigma2, Out2, K) .
  rl b1(OP, xraised(V, Sigma2), E2, Sigma1, Out1, K) => res(xraised(V, Sigma2), Sigma2, Out1, K) .
   --- the operands are dereferenced to their heap objects first [deeply for == / !=]
+  --- Cycle 19: bool is an int in operators [True + 1 is 2, xs[True] is xs[1]], and == / != compare
+  --- canon(deep(..)): True / False are 1 / 0 at every depth and dict entries are sorted by key.
   op dr : OpC State Value -> Value .
-  eq dr(oEq, Sigma, V) = deep(Sigma, V) .
-  eq dr(oNe, Sigma, V) = deep(Sigma, V) .
-  eq dr(OP, Sigma, V) = deref(Sigma, V) [owise] .
+  eq dr(oEq, Sigma, V) = canon(deep(Sigma, V)) .
+  eq dr(oNe, Sigma, V) = canon(deep(Sigma, V)) .
+  eq dr(OP, Sigma, V) = nb(deref(Sigma, V)) [owise] .
+  op nb : Value -> Value .
+  eq nb(true) = 1 .
+  eq nb(false) = 0 .
+  eq nb(V) = V [owise] .
+  op ng : OpC Value -> Value .   --- unary minus on a bool
+  eq ng(oNeg, V) = nb(V) .
+  eq ng(OP, V) = V [owise] .
+  vars Kc1 Kc2 Vc1 Vc2 : Value .  vars Dc : DictObj .  vars Lc1 Lc2 : ListObj .  vars Ic1 Ic2 : Int .
+  vars Sc1 Sc2 : String .  vars ILc1 ILc2 : IdList .  vars Bc1 Bc2 : Stmt .  vars Cc1 Cc2 : State .
+  op canon : Value -> Value .
+  op canonL : ListObj -> ListObj .
+  op canonD : DictObj -> DictObj .
+  op sortD : DictObj -> DictObj .
+  op insD : Value Value DictObj -> DictObj .
+  op keyLt : Value Value -> Bool .
+  op lstLt : ListObj ListObj -> Bool .
+  op rk : Value -> Int .
+  eq canon(true) = 1 .
+  eq canon(false) = 0 .
+  eq canon(listV(Lc1)) = listV(canonL(Lc1)) .
+  eq canon(tupV(Lc1)) = tupV(canonL(Lc1)) .
+  eq canon(dictV(Dc)) = dictV(sortD(canonD(Dc))) .
+  eq canon(Vc1) = Vc1 [owise] .
+  eq canonL(nil) = nil .
+  eq canonL(cons(Vc1, Lc1)) = cons(canon(Vc1), canonL(Lc1)) .
+  eq canonD(nilD) = nilD .
+  eq canonD(consD(Kc1, Vc1, Dc)) = consD(canon(Kc1), canon(Vc1), canonD(Dc)) .
+  eq sortD(nilD) = nilD .
+  eq sortD(consD(Kc1, Vc1, Dc)) = insD(Kc1, Vc1, sortD(Dc)) .
+  eq insD(Kc1, Vc1, nilD) = consD(Kc1, Vc1, nilD) .
+  eq insD(Kc1, Vc1, consD(Kc2, Vc2, Dc))
+   = if keyLt(Kc1, Kc2) then consD(Kc1, Vc1, consD(Kc2, Vc2, Dc))
+     else consD(Kc2, Vc2, insD(Kc1, Vc1, Dc)) fi .
+  --- any total order on the canonical keys will do [equal dicts have the same keys, hence the same sorted entries]
+  eq keyLt(Ic1, Ic2) = Ic1 <Int Ic2 .
+  eq keyLt(Sc1, Sc2) = Sc1 <String Sc2 .
+  eq keyLt(tupV(Lc1), tupV(Lc2)) = lstLt(Lc1, Lc2) .
+  --- two functions: by their unique id [fid] (the order is arbitrary, it only has to be total)
+ ceq keyLt(funcV(ILc1, Bc1, Cc1), funcV(ILc2, Bc2, Cc2)) = Ic1 <Int Ic2
+   if Ic1 := Cc1(fid) /\ Ic2 := Cc2(fid) .
+  eq keyLt(Kc1, Kc2) = rk(Kc1) <Int rk(Kc2) [owise] .
+  eq lstLt(nil, nil) = false .
+  eq lstLt(nil, cons(Vc1, Lc2)) = true .
+  eq lstLt(cons(Vc1, Lc1), nil) = false .
+  eq lstLt(cons(Vc1, Lc1), cons(Vc2, Lc2))
+   = if keyLt(Vc1, Vc2) then true else if keyLt(Vc2, Vc1) then false else lstLt(Lc1, Lc2) fi fi .
+  eq rk(none) = 0 .
+  eq rk(Ic1) = 1 .
+  eq rk(Sc1) = 2 .
+  eq rk(tupV(Lc1)) = 3 .
+  eq rk(Vc1) = 4 [owise] .
   --- identity shortcut as in CPython: x == x is True for the same heap object, also self-containing ones
   op sameRef : Value Value -> Bool .
   eq sameRef(ref(N), ref(N)) = true .
@@ -444,7 +497,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  rl b2(oEq, ref(N), ref(N), Sigma2, Out2, K) => res(true, Sigma2, Out2, K) .
  rl b2(oNe, ref(N), ref(N), Sigma2, Out2, K) => res(false, Sigma2, Out2, K) .
  rl b2(OP, V1, xraised(V, Sigma3), Sigma2, Out2, K) => res(xraised(V, Sigma3), Sigma3, Out2, K) .
- rl u1(OP, V, Sigma1, Out1, K) => un(OP, deref(Sigma1, V), Sigma1, Out1, K) .
+ rl u1(OP, V, Sigma1, Out1, K) => un(OP, ng(OP, deref(Sigma1, V)), Sigma1, Out1, K) .
  rl u1(OP, xraised(V, Sigma2), Sigma1, Out1, K) => res(xraised(V, Sigma2), Sigma2, Out1, K) .
  rl < uminus E, Sigma, Out | K > => < E, Sigma, Out | kU1(K) > .
  rl res(EO1, Sigma1, Out1, kU1(K)) => u1(oNeg, EO1, Sigma1, Out1, K) .
@@ -461,6 +514,9 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  rl bin(oTimes, I1, I2, Sigma, Out2, K) => res(I1 *Int I2, Sigma, Out2, K) .
  crl bin(oFdiv, I1, I2, Sigma, Out2, K) => res(floorDiv(I1, I2), Sigma, Out2, K) if I2 =/=Bool 0 .
  crl bin(oMod, I1, I2, Sigma, Out2, K) => res(floorMod(I1, I2), Sigma, Out2, K) if I2 =/=Bool 0 .
+  --- cycle 19: division by zero raises [CPython: ZeroDivisionError] instead of getting stuck
+ crl bin(oFdiv, I1, I2, Sigma, Out2, K) => res(xraised("ZeroDivisionError", Sigma), Sigma, Out2, K) if I2 ==Bool 0 .
+ crl bin(oMod, I1, I2, Sigma, Out2, K) => res(xraised("ZeroDivisionError", Sigma), Sigma, Out2, K) if I2 ==Bool 0 .
 
   --- ----- string concatenation [String + String = String] ----
  rl bin(oPlus, S1, S2, Sigma, Out2, K) => res(S1 +String S2, Sigma, Out2, K) .
@@ -501,7 +557,9 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
 
   --- ----- list indexing: xs ! i  [Python xs[i]] -----------
  crl bin(oIdx, listV(L), I, Sigma, Out2, K) => res(lstIdx(L, I), Sigma, Out2, K) if I >=Int 0 /\ I <Int lstLen(L) .
-  --- [out-of-range indexing is currently stuck; cycle 7 will raise IndexError]
+  --- cycle 19: an index outside -len..len-1 raises [CPython: IndexError]
+ crl bin(oIdx, listV(L), I, Sigma, Out2, K) => res(xraised("IndexError", Sigma), Sigma, Out2, K) if I >=Int lstLen(L) .
+ crl bin(oIdx, listV(L), I, Sigma, Out2, K) => res(xraised("IndexError", Sigma), Sigma, Out2, K) if I <Int 0 /\ I +Int lstLen(L) <Int 0 .
   --- cycle 18: a negative index counts from the end [xs[-1]]
  crl bin(oIdx, listV(L), I, Sigma, Out2, K) => res(lstIdx(L, I +Int lstLen(L)), Sigma, Out2, K) if I <Int 0 /\ I +Int lstLen(L) >=Int 0 .
 
@@ -536,21 +594,9 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  rl bin(oGe, S1, S2, Sigma, Out2, K) => res(strLt(S2, S1) orBool (S1 ==Bool S2), Sigma, Out2, K) .
 
   op strLt : String String -> Bool .
- ceq strLt(S1, S2) = true  if (rat-substr-cmp(S1, S2)) <Int 0 .
- ceq strLt(S1, S2) = false if (rat-substr-cmp(S1, S2)) >=Int 0 .
-
-  --- Lexicographic comparison via length-and-character compare.
-  --- We call out to the maude built-in `cmp` that returns a Rat;
-  --- conservative impl: compare by string equality then by length.
-  op rat-substr-cmp : String String -> Int .
-  eq rat-substr-cmp(S1, S2) =
-    if S1 ==Bool S2 then 0
-    else if length(S1) <Int length(S2) then -Int 1 else 1 fi
-    fi .
-  --- [This is a *placeholder* lexicographic compare — for v1 we only
-  --- need it to give Python-correct answers on the test corpus,
-  --- which uses equal-length strings.  Real lexicographic compare is
-  --- a follow-up.]
+ eq strLt(S1, S2) = S1 <String S2 .
+  --- Cycle 19: Maude's string order [by character code, as CPython's by code point]; cycles 0-18
+  --- compared equal-length strings correctly and everything else by length only.
 
   op _<Int_ : Int Int -> Bool [prec 37] .
   eq I1 <Int I2 = (I1 <=Int I2) andBool (I1 =/=Bool I2) .
@@ -618,6 +664,13 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  crl ix3(V1, I, X, Sigma2, Out2, K) => < hset(Sigma2, N, listV(lstSet(L, I, V1))), Out2 | K > if ref(N) := look(Sigma2, X) /\ listV(L) := hget(Sigma2, N) /\ I >=Int 0 /\ I <Int lstLen(L) .
  crl ix3(V1, I, X, Sigma2, Out2, K) => < hset(Sigma2, N, listV(lstSet(L, I +Int lstLen(L), V1))), Out2 | K > if ref(N) := look(Sigma2, X) /\ listV(L) := hget(Sigma2, N) /\ I <Int 0 /\ I +Int lstLen(L) >=Int 0 .
  crl ix3(V1, Vk, X, Sigma2, Out2, K) => < hset(Sigma2, N, dictV(dictSet(D, Vk, V1))), Out2 | K > if ref(N) := look(Sigma2, X) /\ dictV(D) := hget(Sigma2, N) .
+  var Bq : Bool .
+  --- cycle 19: an index outside the list raises IndexError; a tuple or string item cannot be assigned [TypeError]
+ crl ix3(V1, I, X, Sigma2, Out2, K) => < raised("IndexError", Sigma2), Out2 | K > if ref(N) := look(Sigma2, X) /\ listV(L) := hget(Sigma2, N) /\ I >=Int lstLen(L) .
+ crl ix3(V1, I, X, Sigma2, Out2, K) => < raised("IndexError", Sigma2), Out2 | K > if ref(N) := look(Sigma2, X) /\ listV(L) := hget(Sigma2, N) /\ I <Int 0 /\ I +Int lstLen(L) <Int 0 .
+ crl ix3(V1, Bq, X, Sigma2, Out2, K) => ix3(V1, nb(Bq), X, Sigma2, Out2, K) if ref(N) := look(Sigma2, X) /\ listV(L) := hget(Sigma2, N) .
+ crl ix3(V1, V2, X, Sigma2, Out2, K) => < raised("TypeError", Sigma2), Out2 | K > if tupV(L) := look(Sigma2, X) .
+ crl ix3(V1, V2, X, Sigma2, Out2, K) => < raised("TypeError", Sigma2), Out2 | K > if S1 := look(Sigma2, X) .
 
   --- x += e / x *= e [cycle 17].  x is read first, then e; a list is changed IN
   --- PLACE in its heap object [so every alias sees it] and x is rebound to the
@@ -675,7 +728,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
   eq toOp(aFdiv) = oFdiv .  eq toOp(aMod) = oMod .
   op sa1 : AugOp ExpOut Exp Exp State Out Kont -> Configuration .
   op sa2 : AugOp Value ExpOut Exp State Out Kont -> Configuration .
-  op sa2b : AugOp Value Value Value Exp State Out Kont -> Configuration .
+  op sa2b : AugOp Value Value ExpOut Exp State Out Kont -> Configuration .
   op sa3 : AugOp Value Value Value ExpOut State Out Kont -> Configuration .
   op sa4 : Value Value ExpOut State Out Kont -> Configuration .
  rl < augSub(X, E1, E2, AOo), Sigma, Out | K > => < X, Sigma, Out | kSa1(E1, E2, AOo, K) > .
@@ -685,9 +738,11 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  rl res(EO, Sigma2, Out2, kSa2(AOo, V1, E2, K)) => sa2(AOo, V1, EO, E2, Sigma2, Out2, K) .
  rl sa2(AOo, V1, xraised(V, Sigma3), E2, Sigma2, Out2, K) => < raised(V, Sigma3), Out2 | K > .
  rl sa2(AOo, V1, V2, E2, Sigma2, Out2, K) => b2(oIdx, V1, V2, Sigma2, Out2, kSa2b(AOo, V1, V2, E2, K)) .
- rl res(Vrp, Sigma2b, Out2b, kSa2b(AOo, V1, V2, E2, K)) => sa2b(AOo, V1, V2, Vrp, E2, Sigma2b, Out2b, K) .
- rl sa2b(AOo, V1, V2, Vrp, E2, Sigma2, Out2, K) => < E2, Sigma2, Out2 | kSa3(AOo, V1, V2, Vrp, K) > .
- rl res(EO, Sigma3, Out3, kSa3(AOo, V1, V2, Vrp, K)) => sa3(AOo, V1, V2, Vrp, EO, Sigma3, Out3, K) .
+ rl res(EO1, Sigma3, Out3, kSa2b(AOo, V1, V2, E2, K)) => sa2b(AOo, V1, V2, EO1, E2, Sigma3, Out3, K) .
+  --- cycle 19: reading x[i] can raise [IndexError / KeyError]; then e is not evaluated
+ rl sa2b(AOo, V1, V2, xraised(V, Sigma4), E2, Sigma3, Out3, K) => < raised(V, Sigma4), Out3 | K > .
+ rl sa2b(AOo, V1, V2, Vrp, E2, Sigma3, Out3, K) => < E2, Sigma3, Out3 | kSa3(AOo, V1, V2, Vrp, K) > .
+ rl res(EO, Sigma4, Out4, kSa3(AOo, V1, V2, Vrp, K)) => sa3(AOo, V1, V2, Vrp, EO, Sigma4, Out4, K) .
  rl sa3(AOo, V1, V2, Vrp, xraised(V, Sigma4), Sigma3, Out3, K) => < raised(V, Sigma4), Out3 | K > .
   --- CPython stores the result back [x[i] = x[i].__iadd__(e)] even when the list was changed in place
  crl sa3(AOo, V1, V2, Vrp, V, Sigma3, Out3, K) => sa4(V1, V2, Vrp, inplace(toOp(AOo), Sigma3, Vrp, V), Out3, K) if ipl(toOp(AOo), Sigma3, Vrp, V) .
@@ -697,6 +752,15 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  crl sa4(ref(N), I, V, Sigma4, Out4, K) => < hset(Sigma4, N, listV(lstSet(L, I, V))), Out4 | K > if listV(L) := hget(Sigma4, N) /\ I >=Int 0 /\ I <Int lstLen(L) .
  crl sa4(ref(N), I, V, Sigma4, Out4, K) => < hset(Sigma4, N, listV(lstSet(L, I +Int lstLen(L), V))), Out4 | K > if listV(L) := hget(Sigma4, N) /\ I <Int 0 /\ I +Int lstLen(L) >=Int 0 .
  crl sa4(ref(N), Vk, V, Sigma4, Out4, K) => < hset(Sigma4, N, dictV(dictSet(D, Vk, V))), Out4 | K > if dictV(D) := hget(Sigma4, N) .
+  --- cycle 19: a bool index into a list is its int [xs[True] = v, xs[True] += v]
+ crl sa4(ref(N), Bq, V, Sigma4, Out4, K) => sa4(ref(N), nb(Bq), V, Sigma4, Out4, K) if listV(L) := hget(Sigma4, N) .
+  --- cycle 19: a tuple or string item cannot be assigned: t[0] += x raises TypeError, after the
+  --- list inside was extended in place [CPython]
+  --- the list may have shrunk while e ran [xs[2] += f() where f empties xs]
+ crl sa4(ref(N), I, V, Sigma4, Out4, K) => < raised("IndexError", Sigma4), Out4 | K > if listV(L) := hget(Sigma4, N) /\ I >=Int lstLen(L) .
+ crl sa4(ref(N), I, V, Sigma4, Out4, K) => < raised("IndexError", Sigma4), Out4 | K > if listV(L) := hget(Sigma4, N) /\ I <Int 0 /\ I +Int lstLen(L) <Int 0 .
+ rl sa4(tupV(L), V2, V, Sigma4, Out4, K) => < raised("TypeError", Sigma4), Out4 | K > .
+ rl sa4(S1, V2, V, Sigma4, Out4, K) => < raised("TypeError", Sigma4), Out4 | K > .
 
   op lstSet : ListObj Int Value -> ListObj .
   vars Vh Vha : Value .  vars Lh : ListObj .
@@ -915,6 +979,10 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  rl bin(oTimes, I1, tupV(L2), Sigma, Out2, K) => res(tupV(lstRep(L2, I1)), Sigma, Out2, K) .
  crl bin(oIdx, tupV(L), I, Sigma, Out2, K) => res(lstIdx(L, I +Int lstLen(L)), Sigma, Out2, K) if I <Int 0 /\ I +Int lstLen(L) >=Int 0 .
 
+  --- cycle 19: out-of-range tuple index raises
+ crl bin(oIdx, tupV(L), I, Sigma, Out2, K) => res(xraised("IndexError", Sigma), Sigma, Out2, K) if I >=Int lstLen(L) .
+ crl bin(oIdx, tupV(L), I, Sigma, Out2, K) => res(xraised("IndexError", Sigma), Sigma, Out2, K) if I <Int 0 /\ I +Int lstLen(L) <Int 0 .
+
   --- len(t) for tuples [shares lstLen with lists].
  rl un(oLen, tupV(L), Sigma, Out', K) => res(lstLen(L), Sigma, Out', K) .
 
@@ -973,6 +1041,10 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  ceq normIdx(Ih, Nh) = Nh               if Ih >=Int 0 /\ Ih >Int Nh .
  ceq normIdx(Ih, Nh) = Ih               if Ih >=Int 0 /\ Ih <=Int Nh .
   eq clampSliceStart(none, Nh) = 0 .
+  eq clampSliceStart(true, Nh) = normIdx(1, Nh) .   --- cycle 19: a bool bound is its int
+  eq clampSliceStart(false, Nh) = 0 .
+  eq clampSliceStop(true, Nh) = normIdx(1, Nh) .
+  eq clampSliceStop(false, Nh) = 0 .
   eq clampSliceStart(Ih, Nh) = normIdx(Ih, Nh) .
   eq clampSliceStop(none, Nh) = Nh .
   eq clampSliceStop(Ih, Nh) = normIdx(Ih, Nh) .
@@ -995,7 +1067,7 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  rl res(EOs, Sigma4, Out4, kSl4(V, Va, Vb, K)) => sl4(V, Va, Vb, EOs, Sigma4, Out4, K) .
  rl sl4(V, Va, Vb, xraised(V2, Sigma5), Sigma4, Out4, K) => res(xraised(V2, Sigma5), Sigma5, Out4, K) .
  rl sl4(V, Va, Vb, Vs, Sigma4, Out4, K) => sliceDo(deref(Sigma4, V), Va, Vb, Sigma4, Out4, K) .
-  vars Sigma5 Sigma2b : State .  var Out2b : Out .
+  vars Sigma5 : State .
 
   --- Slice on list.
  crl sliceDo(listV(L), Va, Vb, Sigma, Out, K) => alloc(listV(lstSlice(L, Sa, Sb)), Sigma, Out, K) if Sa := clampSliceStart(Va, lstLen(L)) /\ Sb := clampSliceStop(Vb, lstLen(L)) .
@@ -1008,7 +1080,11 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  crl sliceDo(S, Va, Vb, Sigma, Out, K) => res(substr(S, Sa, maxInt(Sb -Int Sa, 0)), Sigma, Out, K) if Sa := clampSliceStart(Va, length(S)) /\ Sb := clampSliceStop(Vb, length(S)) .
 
   --- String indexing s[i] returns a 1-character string (CPython).
- crl bin(oIdx, S, Ih, Sigma, Out2, K) => res(substr(S, Sa, 1), Sigma, Out2, K) if Sa := normIdx(Ih, length(S)) .
+ crl bin(oIdx, S, Ih, Sigma, Out2, K) => res(substr(S, Sa, 1), Sigma, Out2, K) if Ih >=Int 0 /\ Ih <Int length(S) /\ Sa := Ih .
+ crl bin(oIdx, S, Ih, Sigma, Out2, K) => res(substr(S, Sa, 1), Sigma, Out2, K) if Ih <Int 0 /\ Ih +Int length(S) >=Int 0 /\ Sa := Ih +Int length(S) .
+  --- cycle 19: an index outside -len..len-1 raises
+ crl bin(oIdx, S, Ih, Sigma, Out2, K) => res(xraised("IndexError", Sigma), Sigma, Out2, K) if Ih >=Int length(S) .
+ crl bin(oIdx, S, Ih, Sigma, Out2, K) => res(xraised("IndexError", Sigma), Sigma, Out2, K) if Ih <Int 0 /\ Ih +Int length(S) <Int 0 .
 
   --- ----- dicts [cycle 9] ----------------------------------
   --- dict literal: evaluate keys and values left-to-right; a raise in any of
@@ -1029,8 +1105,8 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  rl dk2(Vk, xraised(V, Sigma3), DE, Sigma2, Out2, K) => resD(xraised(V, Sigma3), Sigma3, Out2, K) .
  rl dk2(Vk, Vd, DE, Sigma2, Out2, K) => evalDEntries(DE, Sigma2, Out2, kDk3(Vk, Vd, K)) .
  rl resD(DO, Sigma3, Out3, kDk3(Vk, Vd, K)) => dk3(Vk, Vd, DO, Sigma3, Out3, K) .
-  --- a duplicate key keeps the later entry (the rest D is the later entries) [cycle 15 QA]
- crl dk3(Vk, Vd, D, Sigma3, Out3, K) => resD(if dictHas(D, Vk) then D else consD(Vk, Vd, D) fi, Sigma3, Out3, K) if true .
+  --- a duplicate key keeps the later value (the rest D is the later entries) at the first key's position [cycle 15 QA, cycle 19]
+ crl dk3(Vk, Vd, D, Sigma3, Out3, K) => resD(if dictHas(D, Vk) then consD(Vk, dictGet(D, Vk), dictDel(D, Vk)) else consD(Vk, Vd, D) fi, Sigma3, Out3, K) if true .
  rl dk3(Vk, Vd, xraised(V, Sigma4), Sigma3, Out3, K) => resD(xraised(V, Sigma4), Sigma4, Out3, K) .
 
  rl < dictLit(DE), Sigma, Out | K > => evalDEntries(DE, Sigma, Out, kDlitK(K)) .
@@ -1039,7 +1115,9 @@ mod PYTHONLITE-SEMANTICS-BIGSTEP is
  rl dlitK(xraised(V, Sigma2), Sigma1, Out1, K) => res(xraised(V, Sigma2), Sigma2, Out1, K) .
 
   --- dict subscript get: d ! k.
- rl bin(oIdx, dictV(D), Vk, Sigma, Out2, K) => res(dictGet(D, Vk), Sigma, Out2, K) .
+ crl bin(oIdx, dictV(D), Vk, Sigma, Out2, K) => res(dictGet(D, Vk), Sigma, Out2, K) if dictHas(D, Vk) .
+  --- cycle 19: a missing key raises [CPython: KeyError]
+ crl bin(oIdx, dictV(D), Vk, Sigma, Out2, K) => res(xraised("KeyError", Sigma), Sigma, Out2, K) if notBool dictHas(D, Vk) .
 
   --- dict subscript set: d[k] = v is the ix1 / ix2 / ix3 chain above.
 
